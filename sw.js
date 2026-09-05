@@ -11,6 +11,7 @@ const APP_SHELL = [
   './js/auth/authService.js',
   './js/srs/scheduler.js',
   './js/tts/ttsService.js',
+  './js/stt/speechInputService.js',
   './js/modes/audioMode.js',
   './js/modes/quizMode.js',
   './js/modes/manageMode.js',

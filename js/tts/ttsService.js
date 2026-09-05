@@ -70,6 +70,19 @@ export const ttsService = {
     ]);
   },
 
+  /**
+   * Speaks a single utterance and calls onEnd when playback finishes — used to
+   * chain into starting speech *recognition* right after the prompt is read.
+   * That chain hop is not itself a user gesture, which is a smaller risk than
+   * the speak() gesture requirement (see module doc), but isn't guaranteed;
+   * callers should offer a manual fallback control regardless.
+   */
+  speakOnce(text, langPrefix, { onEnd, rate } = {}) {
+    speechSynthesis.cancel();
+    const utterance = speakOne(text, langPrefix, rate);
+    if (onEnd) utterance.onend = onEnd;
+  },
+
   stop() {
     speechSynthesis.cancel();
   },

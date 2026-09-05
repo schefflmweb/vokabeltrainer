@@ -57,10 +57,15 @@ export const ttsService = {
     }
   },
 
-  speakCard(card) {
+  /** direction: 'en-de' speaks English first, 'de-en' speaks German first. The (English) example, if any, is always spoken last. */
+  speakCard(card, direction = 'en-de') {
+    const en = { text: card.en, lang: 'en' };
+    const de = { text: card.de, lang: 'de' };
+    const first = direction === 'de-en' ? de : en;
+    const second = direction === 'de-en' ? en : de;
     this.speakChain([
-      { text: card.en, lang: 'en' },
-      { text: card.de, lang: 'de' },
+      first,
+      second,
       ...(card.example ? [{ text: card.example, lang: 'en' }] : [])
     ]);
   },

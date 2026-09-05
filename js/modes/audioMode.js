@@ -4,6 +4,7 @@ import { syncService } from '../data/syncService.js';
 import { speechInputService } from '../stt/speechInputService.js';
 import { toneService } from '../audio/toneService.js';
 import { progressBarHtml } from '../ui/progressBar.js';
+import { flagGB, flagDE } from '../ui/flags.js';
 
 const SESSION_SIZE = 15;
 const LISTEN_TIMEOUT_MS = 5000;
@@ -298,8 +299,8 @@ export function mount(container) {
       <div class="audio-mode pad center">
         <p class="hint">Übungsrichtung</p>
         <div class="direction-toggle">
-          <button class="btn toggle-btn ${direction === 'en-de' ? 'active' : ''}" id="dir-en-de">🇬🇧 → 🇩🇪 Englisch → Deutsch</button>
-          <button class="btn toggle-btn ${direction === 'de-en' ? 'active' : ''}" id="dir-de-en">🇩🇪 → 🇬🇧 Deutsch → Englisch</button>
+          <button class="btn toggle-btn ${direction === 'en-de' ? 'active' : ''}" id="dir-en-de">${flagGB} → ${flagDE} Englisch → Deutsch</button>
+          <button class="btn toggle-btn ${direction === 'de-en' ? 'active' : ''}" id="dir-de-en">${flagDE} → ${flagGB} Deutsch → Englisch</button>
         </div>
 
         <p class="hint">Eingabeart</p>

@@ -264,6 +264,14 @@ body {
   font-weight: 700;
 }
 
+.flag-icon {
+  width: 20px;
+  height: 12px;
+  vertical-align: middle;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
 /* --- Audio mode (car use): oversized, high-contrast, minimal reading --- */
 
 .audio-mode {

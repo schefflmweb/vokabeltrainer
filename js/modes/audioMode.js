@@ -5,6 +5,7 @@ import { speechInputService } from '../stt/speechInputService.js';
 
 const SESSION_SIZE = 15;
 const LISTEN_TIMEOUT_MS = 5000;
+const REVEAL_DELAY_MS = 4000;
 
 export function mount(container) {
   let direction = 'en-de'; // 'en-de' | 'de-en'
@@ -19,6 +20,17 @@ export function mount(container) {
   let voiceResult = null; // { transcript, correct, expected }
   let voiceErrorMessage = '';
   let activeListen = null;
+
+  // Tap-mode per-card state: translation is hidden for a few seconds to give
+  // room for active recall before it's shown/spoken.
+  let tapRevealed = false;
+  let tapRevealTimer = null;
+  function clearRevealTimer() {
+    if (tapRevealTimer) {
+      clearTimeout(tapRevealTimer);
+      tapRevealTimer = null;
+    }
+  }
 
   // iOS Safari only allows speechSynthesis.speak() when called synchronously
   // inside the tap handler — so the next round's due-list is always fetched
@@ -75,6 +87,7 @@ export function mount(container) {
   }
 
   function backToSelect() {
+    clearRevealTimer();
     activeListen?.stop();
     activeListen = null;
     phase = 'select';
@@ -89,8 +102,11 @@ export function mount(container) {
       return;
     }
     if (interactionMode === 'tap') {
+      tapRevealed = false;
       render();
-      ttsService.speakCard(card, direction);
+      ttsService.speakOnce(primaryText(card), promptLang()); // only the source word for now
+      clearRevealTimer();
+      tapRevealTimer = setTimeout(() => revealTranslation(card), REVEAL_DELAY_MS);
       return;
     }
 
@@ -101,6 +117,22 @@ export function mount(container) {
     ttsService.speakOnce(primaryText(card), promptLang(), {
       onEnd: () => beginListening(card)
     });
+  }
+
+  /**
+   * Fires ~4s after a tap-mode card starts. This speak call is NOT triggered
+   * synchronously from a tap (it's a setTimeout callback), which iOS Safari's
+   * autoplay policy can silently drop — best-effort only. The translation is
+   * always shown as text regardless, and "Nochmal anhören" lets the user
+   * trigger it manually (a real tap) if the auto-speak didn't play.
+   */
+  function revealTranslation(card) {
+    if (currentCard() !== card || interactionMode !== 'tap') return;
+    tapRevealed = true;
+    render();
+    const items = [{ text: secondaryText(card), lang: answerLang() }];
+    if (card.example) items.push({ text: card.example, lang: 'en' });
+    ttsService.speakChain(items);
   }
 
   function beginListening(card) {
@@ -171,21 +203,30 @@ export function mount(container) {
   function rate(known) {
     const card = currentCard();
     if (!card) return;
+    clearRevealTimer();
     stats[known ? 'known' : 'unknown'] += 1;
     vocabStore.markReviewed(card.id, known);
     syncService.sync();
     index += 1;
-    phase = currentCard() ? 'active' : 'finished';
-    render();
-    const next = currentCard();
-    if (next) ttsService.speakCard(next, direction); // stays synchronous with this tap
+    if (currentCard()) {
+      phase = 'active';
+      enterCard(); // stays synchronous with this tap
+    } else {
+      phase = 'finished';
+      prefetchQueue();
+      render();
+    }
   }
 
   function replay() {
     const card = currentCard();
     if (!card) return;
     if (interactionMode === 'tap') {
-      ttsService.speakCard(card, direction);
+      if (tapRevealed) {
+        ttsService.speakCard(card, direction);
+      } else {
+        ttsService.speakOnce(primaryText(card), promptLang());
+      }
     } else if (voiceState === 'result') {
       ttsService.speakOnce(voiceResult.expected, answerLang());
     }
@@ -249,12 +290,15 @@ export function mount(container) {
 
   function renderTapActive() {
     const card = currentCard();
+    const secondaryHtml = tapRevealed
+      ? escapeHtml(secondaryText(card))
+      : '🤔 Zeit zum Nachdenken …';
     container.innerHTML = `
       <div class="audio-mode">
         <div class="progress">${index + 1} / ${queue.length}</div>
         <div class="card-display">
           <div class="card-primary">${escapeHtml(primaryText(card))}</div>
-          <div class="card-secondary">${escapeHtml(secondaryText(card))}</div>
+          <div class="card-secondary ${tapRevealed ? '' : 'reveal-pending'}">${secondaryHtml}</div>
         </div>
         <button class="btn btn-secondary" id="replay-btn">🔊 Nochmal anhören</button>
         <div class="rate-buttons">
@@ -334,6 +378,7 @@ export function mount(container) {
   render();
 
   return () => {
+    clearRevealTimer();
     activeListen?.stop();
     ttsService.stop();
   };

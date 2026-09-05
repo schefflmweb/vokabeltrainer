@@ -231,6 +231,26 @@ body {
   font-size: 0.85rem;
 }
 
+.direction-toggle {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.toggle-btn {
+  flex: 1;
+  padding: 12px 8px;
+  font-size: 0.9rem;
+}
+
+.toggle-btn.active {
+  background: var(--accent);
+  color: #0f172a;
+  font-weight: 700;
+  border-color: var(--accent);
+}
+
 .btn-primary .hint,
 .btn-success .hint,
 .btn-danger .hint {

@@ -18,7 +18,16 @@ export function mount(container) {
   let stats = { known: 0, unknown: 0 };
   let phase = 'select'; // 'select' | 'active' | 'finished'
   let quizType = 'choice'; // 'choice' | 'typing'
+  let direction = 'en-de'; // 'en-de' | 'de-en'
   let answered = false;
+
+  function promptText(card) {
+    return direction === 'en-de' ? card.en : card.de;
+  }
+
+  function answerText(card) {
+    return direction === 'en-de' ? card.de : card.en;
+  }
 
   function currentCard() {
     return index >= 0 && index < queue.length ? queue[index] : null;
@@ -26,8 +35,13 @@ export function mount(container) {
 
   function buildOptions(card) {
     const distractorPool = allVocab.filter((v) => v.id !== card.id);
-    const distractors = shuffle(distractorPool).slice(0, 3).map((v) => v.de);
-    return shuffle([card.de, ...distractors]);
+    const distractors = shuffle(distractorPool).slice(0, 3).map((v) => answerText(v));
+    return shuffle([answerText(card), ...distractors]);
+  }
+
+  function setDirection(dir) {
+    direction = dir;
+    renderSelect();
   }
 
   async function startSession(type) {
@@ -68,6 +82,12 @@ export function mount(container) {
   function renderSelect() {
     container.innerHTML = `
       <div class="quiz-mode pad center">
+        <p class="hint">Übungsrichtung</p>
+        <div class="direction-toggle">
+          <button class="btn toggle-btn ${direction === 'en-de' ? 'active' : ''}" id="dir-en-de">🇬🇧 → 🇩🇪 Englisch → Deutsch</button>
+          <button class="btn toggle-btn ${direction === 'de-en' ? 'active' : ''}" id="dir-de-en">🇩🇪 → 🇬🇧 Deutsch → Englisch</button>
+        </div>
+
         <p class="hint">Wie möchtest du üben?</p>
         <button class="btn btn-huge btn-primary" id="start-choice">
           🔤 Multiple Choice
@@ -78,6 +98,8 @@ export function mount(container) {
           <span class="hint">Übersetzung selbst schreiben</span>
         </button>
       </div>`;
+    container.querySelector('#dir-en-de').addEventListener('click', () => setDirection('en-de'));
+    container.querySelector('#dir-de-en').addEventListener('click', () => setDirection('de-en'));
     container.querySelector('#start-choice').addEventListener('click', () => startSession('choice'));
     container.querySelector('#start-typing').addEventListener('click', () => startSession('typing'));
   }
@@ -100,7 +122,7 @@ export function mount(container) {
     container.innerHTML = `
       <div class="quiz-mode">
         <div class="progress">${index + 1} / ${queue.length}</div>
-        <div class="quiz-word">${escapeHtml(card.en)}</div>
+        <div class="quiz-word">${escapeHtml(promptText(card))}</div>
         <div class="quiz-options">
           ${options.map((opt, i) => `<button class="btn btn-option" data-opt="${i}">${escapeHtml(opt)}</button>`).join('')}
         </div>
@@ -111,7 +133,7 @@ export function mount(container) {
         if (answered) return;
         answered = true;
         const selected = options[i];
-        const correct = selected === card.de;
+        const correct = selected === answerText(card);
         registerAnswer(correct, card);
         renderChoiceAnswered(card, options, selected, correct);
       });
@@ -119,19 +141,20 @@ export function mount(container) {
   }
 
   function renderChoiceAnswered(card, options, selected, correct) {
+    const correctAnswer = answerText(card);
     container.innerHTML = `
       <div class="quiz-mode">
         <div class="progress">${index + 1} / ${queue.length}</div>
-        <div class="quiz-word">${escapeHtml(card.en)}</div>
+        <div class="quiz-word">${escapeHtml(promptText(card))}</div>
         <div class="quiz-options">
           ${options.map((opt) => {
             let cls = 'btn btn-option disabled';
-            if (opt === card.de) cls += ' correct';
+            if (opt === correctAnswer) cls += ' correct';
             else if (opt === selected) cls += ' incorrect';
             return `<button class="${cls}" disabled>${escapeHtml(opt)}</button>`;
           }).join('')}
         </div>
-        <p class="hint">${correct ? '✅ Richtig!' : `❌ Richtig wäre: ${escapeHtml(card.de)}`}</p>
+        <p class="hint">${correct ? '✅ Richtig!' : `❌ Richtig wäre: ${escapeHtml(correctAnswer)}`}</p>
         <button class="btn btn-huge btn-primary" id="next-btn">Weiter ▶️</button>
       </div>`;
     container.querySelector('#next-btn').addEventListener('click', next);
@@ -139,12 +162,13 @@ export function mount(container) {
 
   function renderTyping() {
     const card = currentCard();
+    const placeholder = direction === 'en-de' ? 'Deutsche Übersetzung' : 'Englische Übersetzung';
     container.innerHTML = `
       <div class="quiz-mode">
         <div class="progress">${index + 1} / ${queue.length}</div>
-        <div class="quiz-word">${escapeHtml(card.en)}</div>
+        <div class="quiz-word">${escapeHtml(promptText(card))}</div>
         <form id="typing-form" class="typing-form">
-          <input type="text" id="typing-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Deutsche Übersetzung" />
+          <input type="text" id="typing-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${placeholder}" />
           <button type="submit" class="btn btn-huge btn-primary">Prüfen</button>
         </form>
       </div>`;
@@ -156,19 +180,20 @@ export function mount(container) {
       if (answered) return;
       answered = true;
       const value = input.value;
-      const correct = normalizeAnswer(value) === normalizeAnswer(card.de);
+      const correct = normalizeAnswer(value) === normalizeAnswer(answerText(card));
       registerAnswer(correct, card);
       renderTypingAnswered(card, value, correct);
     });
   }
 
   function renderTypingAnswered(card, value, correct) {
+    const correctAnswer = answerText(card);
     container.innerHTML = `
       <div class="quiz-mode">
         <div class="progress">${index + 1} / ${queue.length}</div>
-        <div class="quiz-word">${escapeHtml(card.en)}</div>
+        <div class="quiz-word">${escapeHtml(promptText(card))}</div>
         <p class="typing-answer ${correct ? 'correct' : 'incorrect'}">${escapeHtml(value) || '–'}</p>
-        <p class="hint">${correct ? '✅ Richtig!' : `❌ Richtig wäre: ${escapeHtml(card.de)}`}</p>
+        <p class="hint">${correct ? '✅ Richtig!' : `❌ Richtig wäre: ${escapeHtml(correctAnswer)}`}</p>
         <button class="btn btn-huge btn-primary" id="next-btn">Weiter ▶️</button>
       </div>`;
     container.querySelector('#next-btn').addEventListener('click', next);

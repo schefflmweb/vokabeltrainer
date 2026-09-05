@@ -225,6 +225,54 @@ body {
   opacity: 0.9;
 }
 
+.btn-huge .hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.85rem;
+}
+
+.btn-primary .hint,
+.btn-success .hint,
+.btn-danger .hint {
+  color: rgba(15, 23, 42, 0.65);
+}
+
+.typing-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.typing-form input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 1.3rem;
+  text-align: center;
+  width: 100%;
+}
+
+.typing-answer {
+  text-align: center;
+  font-size: 1.3rem;
+  font-weight: 700;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+}
+
+.typing-answer.correct {
+  background: var(--success);
+  color: #052e12;
+}
+
+.typing-answer.incorrect {
+  background: var(--danger);
+  color: #2b0505;
+}
+
 /* --- Manage mode --- */
 
 .manage-mode section {

@@ -2,10 +2,12 @@ import { vocabStore } from '../data/vocabStore.js';
 import { ttsService } from '../tts/ttsService.js';
 import { syncService } from '../data/syncService.js';
 import { speechInputService } from '../stt/speechInputService.js';
+import { toneService } from '../audio/toneService.js';
 
 const SESSION_SIZE = 15;
 const LISTEN_TIMEOUT_MS = 5000;
 const REVEAL_DELAY_MS = 3000;
+const AUTO_ADVANCE_DELAY_MS = 800;
 
 export function mount(container) {
   let direction = 'en-de'; // 'en-de' | 'de-en'
@@ -20,6 +22,8 @@ export function mount(container) {
   let voiceResult = null; // { transcript, correct, expected }
   let voiceErrorMessage = '';
   let activeListen = null;
+  let pendingAdvance = false; // guards against double-advance (auto + manual "Weiter" tap racing)
+  let autoAdvanceTimer = null;
 
   // Tap-mode per-card state: translation is hidden for a few seconds to give
   // room for active recall before it's shown/spoken.
@@ -78,6 +82,7 @@ export function mount(container) {
 
   function startSession() {
     if (!pendingQueue) return; // guarded by disabled button; shouldn't fire
+    toneService.unlock(); // real tap — unlocks Web Audio for the rest of this session
     queue = pendingQueue;
     index = 0;
     stats = { known: 0, unknown: 0 };
@@ -88,6 +93,10 @@ export function mount(container) {
 
   function backToSelect() {
     clearRevealTimer();
+    if (autoAdvanceTimer) {
+      clearTimeout(autoAdvanceTimer);
+      autoAdvanceTimer = null;
+    }
     activeListen?.stop();
     activeListen = null;
     phase = 'select';
@@ -96,6 +105,11 @@ export function mount(container) {
 
   /** Called synchronously from a tap (start / next-card button) — speaks the current card and, in voice mode, chains into listening once speech ends. */
   function enterCard() {
+    pendingAdvance = false;
+    if (autoAdvanceTimer) {
+      clearTimeout(autoAdvanceTimer);
+      autoAdvanceTimer = null;
+    }
     const card = currentCard();
     if (!card) {
       render();
@@ -159,9 +173,20 @@ export function mount(container) {
     voiceResult = { transcript, correct, expected };
     voiceState = 'result';
     render();
-    if (!correct) {
-      // Best-effort — the correct answer is also always shown as text regardless.
-      ttsService.speakOnce(expected, answerLang());
+
+    // Fully hands-free by default: a tone plays (reliable, unlocked once at
+    // session start) and the round auto-advances. The "Weiter"/"Antwort
+    // anhören" buttons stay in the UI as a manual alternative — guarded by
+    // pendingAdvance so a tap and the automatic path can't both fire.
+    if (correct) {
+      toneService.playCorrect();
+      autoAdvanceTimer = setTimeout(() => advanceCard(), AUTO_ADVANCE_DELAY_MS);
+    } else {
+      toneService.playIncorrect();
+      // Best-effort speech — the correct answer is also always shown as text.
+      ttsService.speakOnce(expected, answerLang(), { onEnd: () => advanceCard() });
+      // Backstop in case onEnd never fires (e.g. speech silently dropped).
+      autoAdvanceTimer = setTimeout(() => advanceCard(), LISTEN_TIMEOUT_MS);
     }
   }
 
@@ -190,10 +215,12 @@ export function mount(container) {
   }
 
   function advanceCard() {
+    if (pendingAdvance) return; // already advanced (auto path and manual tap raced)
+    pendingAdvance = true;
     index += 1;
     phase = currentCard() ? 'active' : 'finished';
     if (phase === 'active') {
-      enterCard();
+      enterCard(); // resets pendingAdvance for the new card
     } else {
       prefetchQueue();
       render();
@@ -379,6 +406,7 @@ export function mount(container) {
 
   return () => {
     clearRevealTimer();
+    if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
     activeListen?.stop();
     ttsService.stop();
   };

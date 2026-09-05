@@ -301,8 +301,18 @@ body {
 }
 
 #start-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   font-weight: 400;
   font-size: 1.85rem;
+}
+
+#start-btn .icon-inline-wrap {
+  width: 42px;
+  height: 42px;
+  vertical-align: 0;
 }
 
 /* --- Audio mode (car use): oversized, high-contrast, minimal reading --- */

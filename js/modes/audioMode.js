@@ -5,7 +5,7 @@ import { speechInputService } from '../stt/speechInputService.js';
 
 const SESSION_SIZE = 15;
 const LISTEN_TIMEOUT_MS = 5000;
-const REVEAL_DELAY_MS = 4000;
+const REVEAL_DELAY_MS = 3000;
 
 export function mount(container) {
   let direction = 'en-de'; // 'en-de' | 'de-en'

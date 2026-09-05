@@ -83,6 +83,34 @@ export const ttsService = {
     if (onEnd) utterance.onend = onEnd;
   },
 
+  /**
+   * Speaks a sequence of { text, lang } items one after another (chained via
+   * each utterance's onend) and calls onEnd once the last one finishes — used
+   * to know when it's safe to auto-advance. Same best-effort caveat as
+   * speakOnce: this whole chain typically isn't gesture-triggered, so a
+   * caller-side timeout backstop is recommended in case onEnd never fires.
+   */
+  speakSequence(items, onEnd) {
+    speechSynthesis.cancel();
+    const valid = items.filter((i) => i.text);
+    if (valid.length === 0) {
+      onEnd?.();
+      return;
+    }
+    let i = 0;
+    const playNext = () => {
+      if (i >= valid.length) {
+        onEnd?.();
+        return;
+      }
+      const item = valid[i];
+      i += 1;
+      const utterance = speakOne(item.text, item.lang, item.rate);
+      utterance.onend = playNext;
+    };
+    playNext();
+  },
+
   stop() {
     speechSynthesis.cancel();
   },

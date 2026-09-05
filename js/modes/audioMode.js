@@ -8,6 +8,7 @@ const SESSION_SIZE = 15;
 const LISTEN_TIMEOUT_MS = 5000;
 const REVEAL_DELAY_MS = 3000;
 const AUTO_ADVANCE_DELAY_MS = 800;
+const TAP_AUTO_ADVANCE_BACKSTOP_MS = 6000;
 
 export function mount(container) {
   let direction = 'en-de'; // 'en-de' | 'de-en'
@@ -134,11 +135,13 @@ export function mount(container) {
   }
 
   /**
-   * Fires ~4s after a tap-mode card starts. This speak call is NOT triggered
+   * Fires ~3s after a tap-mode card starts. This speak call is NOT triggered
    * synchronously from a tap (it's a setTimeout callback), which iOS Safari's
    * autoplay policy can silently drop — best-effort only. The translation is
    * always shown as text regardless, and "Nochmal anhören" lets the user
-   * trigger it manually (a real tap) if the auto-speak didn't play.
+   * trigger it manually (a real tap) if the auto-speak didn't play. Once the
+   * reveal speech ends, the card auto-advances (counted as "kannte ich")
+   * unless the user already tapped ✅/❌ themselves.
    */
   function revealTranslation(card) {
     if (currentCard() !== card || interactionMode !== 'tap') return;
@@ -146,7 +149,19 @@ export function mount(container) {
     render();
     const items = [{ text: secondaryText(card), lang: answerLang() }];
     if (card.example) items.push({ text: card.example, lang: 'en' });
-    ttsService.speakChain(items);
+    ttsService.speakSequence(items, () => autoAdvanceTap(card));
+    // Backstop in case none of the onend callbacks fire (speech silently dropped).
+    if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
+    autoAdvanceTimer = setTimeout(() => autoAdvanceTap(card), TAP_AUTO_ADVANCE_BACKSTOP_MS);
+  }
+
+  function autoAdvanceTap(card) {
+    if (currentCard() !== card) return;
+    if (autoAdvanceTimer) {
+      clearTimeout(autoAdvanceTimer);
+      autoAdvanceTimer = null;
+    }
+    rate(true); // no explicit tap -> counts as "kannte ich" per user's choice
   }
 
   function beginListening(card) {
@@ -228,16 +243,22 @@ export function mount(container) {
   }
 
   function rate(known) {
+    if (pendingAdvance) return; // already advanced (auto path and manual tap raced)
+    pendingAdvance = true;
     const card = currentCard();
     if (!card) return;
     clearRevealTimer();
+    if (autoAdvanceTimer) {
+      clearTimeout(autoAdvanceTimer);
+      autoAdvanceTimer = null;
+    }
     stats[known ? 'known' : 'unknown'] += 1;
     vocabStore.markReviewed(card.id, known);
     syncService.sync();
     index += 1;
     if (currentCard()) {
       phase = 'active';
-      enterCard(); // stays synchronous with this tap
+      enterCard(); // resets pendingAdvance for the new card
     } else {
       phase = 'finished';
       prefetchQueue();

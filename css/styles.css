@@ -562,6 +562,24 @@ textarea:focus {
   color: var(--text-muted);
 }
 
+.search-input {
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 1rem;
+  width: 100%;
+  margin-bottom: 10px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.25);
+}
+
 .vocab-list {
   max-height: 50vh;
   overflow-y: auto;

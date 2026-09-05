@@ -3,17 +3,65 @@ import { parseCsv } from '../csv/csvImport.js';
 import { authService } from '../auth/authService.js';
 import { syncService } from '../data/syncService.js';
 
+function filterVocab(list, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return list;
+  return list.filter((v) => v.en.toLowerCase().includes(q) || v.de.toLowerCase().includes(q));
+}
+
+function renderVocabRowsHtml(list) {
+  if (list.length === 0) {
+    return `<p class="hint">Keine Treffer.</p>`;
+  }
+  const byCategory = {};
+  for (const v of list) {
+    (byCategory[v.category] ||= []).push(v);
+  }
+  const categories = Object.keys(byCategory).sort();
+  return categories.map((cat) => `
+    <div class="vocab-category">
+      <h4>${escapeHtml(cat)}</h4>
+      ${byCategory[cat].map((v) => `
+        <div class="vocab-row" data-id="${v.id}">
+          <span>${escapeHtml(v.en)} – ${escapeHtml(v.de)}</span>
+          <button class="btn btn-icon delete-btn" data-id="${v.id}" aria-label="Löschen">🗑️</button>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
 export function mount(container) {
   let unsubscribeStatus = null;
   let csvStatusMessage = '';
+  let searchQuery = '';
+  let vocabCache = [];
+
+  function bindDeleteButtons(scopeEl) {
+    scopeEl.querySelectorAll('.delete-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await vocabStore.remove(btn.dataset.id);
+        syncService.sync();
+        render();
+      });
+    });
+  }
+
+  /** Re-renders only the list + count, leaving the search input itself untouched so it never loses focus while typing. */
+  function updateVocabListOnly() {
+    const input = container.querySelector('#vocab-search');
+    searchQuery = input ? input.value : searchQuery;
+    const filtered = filterVocab(vocabCache, searchQuery);
+    const listEl = container.querySelector('#vocab-list-container');
+    listEl.innerHTML = renderVocabRowsHtml(filtered);
+    bindDeleteButtons(listEl);
+    const countEl = container.querySelector('#vocab-count');
+    if (countEl) countEl.textContent = filtered.length;
+  }
 
   async function render() {
-    const all = await vocabStore.getAll();
-    const byCategory = {};
-    for (const v of all) {
-      (byCategory[v.category] ||= []).push(v);
-    }
-    const categories = Object.keys(byCategory).sort();
+    vocabCache = await vocabStore.getAll();
+    const filtered = filterVocab(vocabCache, searchQuery);
 
     container.innerHTML = `
       <div class="manage-mode pad">
@@ -40,20 +88,15 @@ export function mount(container) {
         </section>
 
         <section>
-          <h3>Vokabeln (${all.length})</h3>
-          <div class="vocab-list">
-            ${categories.map((cat) => `
-              <div class="vocab-category">
-                <h4>${escapeHtml(cat)}</h4>
-                ${byCategory[cat].map((v) => `
-                  <div class="vocab-row" data-id="${v.id}">
-                    <span>${escapeHtml(v.en)} – ${escapeHtml(v.de)}</span>
-                    <button class="btn btn-icon delete-btn" data-id="${v.id}" aria-label="Löschen">🗑️</button>
-                  </div>
-                `).join('')}
-              </div>
-            `).join('')}
-          </div>
+          <h3>Vokabeln (<span id="vocab-count">${filtered.length}</span>)</h3>
+          <input type="text" id="vocab-search" class="search-input" placeholder="🔍 Suchen (Englisch oder Deutsch) …" value="${escapeHtml(searchQuery)}" />
+          <div class="vocab-list" id="vocab-list-container">${renderVocabRowsHtml(filtered)}</div>
+        </section>
+
+        <section>
+          <h3>Alle Vokabeln löschen</h3>
+          <p class="hint">Löscht deine komplette Vokabelliste unwiderruflich (inkl. Lernfortschritt) — z. B. um danach nur eine eigene CSV frisch zu importieren.</p>
+          <button class="btn btn-danger" id="delete-all-btn">🗑️ Alle Vokabeln löschen</button>
         </section>
       </div>`;
 
@@ -67,12 +110,17 @@ export function mount(container) {
       render();
     });
 
-    container.querySelectorAll('.delete-btn').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        await vocabStore.remove(btn.dataset.id);
-        syncService.sync();
-        render();
-      });
+    bindDeleteButtons(container.querySelector('#vocab-list-container'));
+
+    container.querySelector('#vocab-search').addEventListener('input', updateVocabListOnly);
+
+    container.querySelector('#delete-all-btn').addEventListener('click', async () => {
+      const count = vocabCache.length;
+      if (!confirm(`Wirklich alle ${count} Vokabeln und deinen Lernfortschritt unwiderruflich löschen?`)) return;
+      await vocabStore.removeAll();
+      syncService.sync();
+      searchQuery = '';
+      render();
     });
 
     container.querySelector('#csv-file').addEventListener('change', async (e) => {

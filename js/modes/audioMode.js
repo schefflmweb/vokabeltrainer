@@ -16,8 +16,6 @@ const TAP_AUTO_ADVANCE_BACKSTOP_MS = 6000;
 export function mount(container) {
   let direction = 'en-de'; // 'en-de' | 'de-en'
   let interactionMode = 'tap'; // 'tap' | 'voice'
-  let category = 'all'; // 'all' or an exact category name
-  let categories = [];
   let phase = 'select'; // 'select' | 'active' | 'finished'
   let queue = [];
   let index = -1;
@@ -49,17 +47,9 @@ export function mount(container) {
   let pendingQueue = null;
   function prefetchQueue() {
     pendingQueue = null;
-    const cat = category === 'all' ? null : category;
-    vocabStore.getDue(SESSION_SIZE, Date.now(), cat).then((q) => {
+    vocabStore.getDue(SESSION_SIZE).then((q) => {
       pendingQueue = q;
       if (phase === 'select' || phase === 'finished') render();
-    });
-  }
-
-  function loadCategories() {
-    vocabStore.getCategories().then((cats) => {
-      categories = cats;
-      if (phase === 'select') render();
     });
   }
 
@@ -91,12 +81,6 @@ export function mount(container) {
   function setInteractionMode(mode) {
     interactionMode = mode;
     if (mode === 'voice') speechInputService.requestMicPermission();
-    render();
-  }
-
-  function setCategory(cat) {
-    category = cat;
-    prefetchQueue();
     render();
   }
 
@@ -320,12 +304,6 @@ export function mount(container) {
           <button class="btn toggle-btn ${direction === 'de-en' ? 'active' : ''}" id="dir-de-en">${flagDE} → ${flagGB} Deutsch → Englisch</button>
         </div>
 
-        <p class="hint">Kategorie</p>
-        <select class="category-select" id="category-select">
-          <option value="all" ${category === 'all' ? 'selected' : ''}>Alle Kategorien</option>
-          ${categories.map((c) => `<option value="${escapeHtml(c)}" ${c === category ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
-        </select>
-
         <p class="hint">Eingabeart</p>
         <div class="direction-toggle">
           <button class="btn toggle-btn ${interactionMode === 'tap' ? 'active' : ''}" id="mode-tap">👆 Antippen</button>
@@ -341,7 +319,6 @@ export function mount(container) {
       </div>`;
     container.querySelector('#dir-en-de').addEventListener('click', () => setDirection('en-de'));
     container.querySelector('#dir-de-en').addEventListener('click', () => setDirection('de-en'));
-    container.querySelector('#category-select').addEventListener('change', (e) => setCategory(e.target.value));
     container.querySelector('#mode-tap').addEventListener('click', () => setInteractionMode('tap'));
     container.querySelector('#mode-voice').addEventListener('click', () => setInteractionMode('voice'));
     container.querySelector('#start-btn').addEventListener('click', startSession);
@@ -449,7 +426,6 @@ export function mount(container) {
   }
 
   prefetchQueue();
-  loadCategories();
   render();
 
   return () => {

@@ -2,19 +2,39 @@
  * Comma and semicolon can't both be treated as delimiters at once — a file
  * that uses ";" as the column separator may legitimately contain "," inside
  * a translation (e.g. a list of synonyms), and vice versa. So the delimiter
- * is detected once per file (whichever character is more frequent overall)
- * rather than accepting either character everywhere.
+ * is detected once per file rather than accepting either character
+ * everywhere. Picking whichever character is simply more frequent overall
+ * breaks down when many rows carry comma-separated synonym lists — those
+ * in-field commas can easily outnumber the one semicolon per row that's
+ * actually acting as the column separator. Instead, the true delimiter is
+ * the one whose per-row count is most *consistent* (e.g. exactly 1 per row
+ * for a 2-column file) — synonym commas vary row to row (0, 2, 3, ...) and
+ * so don't agree on a single count the way a real column separator does.
  */
 function detectDelimiter(lines) {
-  let commaCount = 0;
-  let semicolonCount = 0;
-  for (const line of lines) {
-    for (const ch of line) {
-      if (ch === ',') commaCount += 1;
-      else if (ch === ';') semicolonCount += 1;
+  const candidates = [';', ','];
+  let best = candidates[0];
+  let bestScore = -1;
+  for (const delimiter of candidates) {
+    const countsPerLine = new Map();
+    for (const line of lines) {
+      let count = 0;
+      for (const ch of line) {
+        if (ch === delimiter) count += 1;
+      }
+      if (count === 0) continue;
+      countsPerLine.set(count, (countsPerLine.get(count) || 0) + 1);
+    }
+    let score = 0;
+    for (const linesWithThisCount of countsPerLine.values()) {
+      score = Math.max(score, linesWithThisCount);
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = delimiter;
     }
   }
-  return semicolonCount > commaCount ? ';' : ',';
+  return best;
 }
 
 function parseLine(line, delimiter) {

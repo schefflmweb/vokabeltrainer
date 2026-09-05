@@ -21,6 +21,8 @@ export function mount(container) {
   let phase = 'select'; // 'select' | 'active' | 'finished'
   let quizType = 'choice'; // 'choice' | 'typing'
   let direction = 'en-de'; // 'en-de' | 'de-en'
+  let category = 'all'; // 'all' or an exact category name
+  let categories = [];
   let answered = false;
 
   function promptText(card) {
@@ -46,10 +48,26 @@ export function mount(container) {
     renderSelect();
   }
 
+  function setCategory(cat) {
+    category = cat;
+    renderSelect();
+  }
+
+  function loadCategories() {
+    vocabStore.getCategories().then((cats) => {
+      categories = cats;
+      if (phase === 'select') renderSelect();
+    });
+  }
+
   async function startSession(type) {
     quizType = type;
-    allVocab = await vocabStore.getAll();
-    queue = await vocabStore.getDue(SESSION_SIZE);
+    const fullVocab = await vocabStore.getAll();
+    const scoped = category === 'all' ? fullVocab : fullVocab.filter((v) => v.category === category);
+    // Distractors come from the same category when there are enough to build
+    // options from — falls back to the full list if the category is too small.
+    allVocab = scoped.length >= 4 ? scoped : fullVocab;
+    queue = await vocabStore.getDue(SESSION_SIZE, Date.now(), category === 'all' ? null : category);
     index = 0;
     stats = { known: 0, unknown: 0 };
     answered = false;
@@ -90,6 +108,12 @@ export function mount(container) {
           <button class="btn toggle-btn ${direction === 'de-en' ? 'active' : ''}" id="dir-de-en">${flagDE} → ${flagGB} Deutsch → Englisch</button>
         </div>
 
+        <p class="hint">Kategorie</p>
+        <select class="category-select" id="category-select">
+          <option value="all" ${category === 'all' ? 'selected' : ''}>Alle Kategorien</option>
+          ${categories.map((c) => `<option value="${escapeHtml(c)}" ${c === category ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+        </select>
+
         <p class="hint">Wie möchtest du üben?</p>
         <button class="btn btn-huge btn-primary" id="start-choice">
           🔤 Multiple Choice
@@ -102,6 +126,7 @@ export function mount(container) {
       </div>`;
     container.querySelector('#dir-en-de').addEventListener('click', () => setDirection('en-de'));
     container.querySelector('#dir-de-en').addEventListener('click', () => setDirection('de-en'));
+    container.querySelector('#category-select').addEventListener('change', (e) => setCategory(e.target.value));
     container.querySelector('#start-choice').addEventListener('click', () => startSession('choice'));
     container.querySelector('#start-typing').addEventListener('click', () => startSession('typing'));
   }
@@ -201,6 +226,7 @@ export function mount(container) {
     container.querySelector('#next-btn').addEventListener('click', next);
   }
 
+  loadCategories();
   render();
 
   return () => {};

@@ -54,15 +54,24 @@ export const vocabStore = {
     return db.get(id);
   },
 
-  async getDue(limit = 20, now = Date.now()) {
+  /** category: null/undefined for all categories, or an exact category name to restrict the pool to. */
+  async getDue(limit = 20, now = Date.now(), category = null) {
     const all = await this.getAll();
-    const due = all.filter((v) => v.srs.dueDate <= now);
+    const scoped = category ? all.filter((v) => v.category === category) : all;
+    const due = scoped.filter((v) => v.srs.dueDate <= now);
     // Shuffled, not sorted by dueDate: freshly-seeded/imported words share
     // (near-)identical timestamps, so sorting left the due pool in a fixed
     // order and sessions kept showing the same first N cards every time.
-    const pool = due.length > 0 ? due : all; // nothing due -> practice from everything
+    const pool = due.length > 0 ? due : scoped; // nothing due -> practice from everything in scope
     const shuffled = [...pool].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, limit);
+  },
+
+  /** Sorted list of distinct categories currently present in the vocab list. */
+  async getCategories() {
+    const all = await this.getAll();
+    const set = new Set(all.map((v) => v.category || 'Sonstiges'));
+    return [...set].sort((a, b) => a.localeCompare(b, 'de'));
   },
 
   /** Adds a vocab entry, or updates the existing one (by English word, case-insensitive) if it already exists — never creates a duplicate. Learning progress on an updated entry is preserved. */

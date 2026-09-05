@@ -2,6 +2,7 @@ import { vocabStore } from '../data/vocabStore.js';
 import { syncService } from '../data/syncService.js';
 import { progressBarHtml } from '../ui/progressBar.js';
 import { flagGB, flagDE } from '../ui/flags.js';
+import { checklistIcon, keyboardIcon, starIcon, refreshIcon, checkCircleIcon, xCircleIcon, playIcon } from '../ui/icons.js';
 
 const SESSION_SIZE = 15;
 
@@ -91,13 +92,13 @@ export function mount(container) {
         </div>
 
         <p class="hint">Wie möchtest du üben?</p>
-        <button class="btn btn-huge btn-primary" id="start-choice">
-          🔤 Multiple Choice
-          <span class="hint">Antwort antippen</span>
+        <button class="btn btn-huge btn-primary btn-with-icon" id="start-choice">
+          <span class="icon-inline-wrap icon-lg">${checklistIcon}</span>
+          <span>Multiple Choice<span class="hint">Antwort antippen</span></span>
         </button>
-        <button class="btn btn-huge btn-secondary" id="start-typing">
-          ⌨️ Eintippen
-          <span class="hint">Übersetzung selbst schreiben</span>
+        <button class="btn btn-huge btn-secondary btn-with-icon" id="start-typing">
+          <span class="icon-inline-wrap icon-lg">${keyboardIcon}</span>
+          <span>Eintippen<span class="hint">Übersetzung selbst schreiben</span></span>
         </button>
       </div>`;
     container.querySelector('#dir-en-de').addEventListener('click', () => setDirection('en-de'));
@@ -109,9 +110,9 @@ export function mount(container) {
   function renderFinished() {
     container.innerHTML = `
       <div class="quiz-mode pad center">
-        <h2>Runde fertig! 🎉</h2>
+        <h2 class="btn-with-icon"><span class="icon-inline-wrap icon-lg">${starIcon}</span> Runde fertig!</h2>
         <p class="hint">${stats.known} richtig · ${stats.unknown} falsch</p>
-        <button class="btn btn-huge btn-primary" id="again-btn">🔄 Neue Runde</button>
+        <button class="btn btn-huge btn-primary btn-with-icon" id="again-btn"><span class="icon-inline-wrap icon-lg">${refreshIcon}</span> Neue Runde</button>
         <button class="btn btn-secondary" id="switch-btn">Modus wechseln</button>
       </div>`;
     container.querySelector('#again-btn').addEventListener('click', () => startSession(quizType));
@@ -156,8 +157,8 @@ export function mount(container) {
             return `<button class="${cls}" disabled>${escapeHtml(opt)}</button>`;
           }).join('')}
         </div>
-        <p class="hint">${correct ? '✅ Richtig!' : `❌ Richtig wäre: ${escapeHtml(correctAnswer)}`}</p>
-        <button class="btn btn-huge btn-primary" id="next-btn">Weiter ▶️</button>
+        <p class="hint btn-with-icon"><span class="icon-inline-wrap">${correct ? checkCircleIcon : xCircleIcon}</span> ${correct ? 'Richtig!' : `Richtig wäre: ${escapeHtml(correctAnswer)}`}</p>
+        <button class="btn btn-huge btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap icon-lg">${playIcon}</span></button>
       </div>`;
     container.querySelector('#next-btn').addEventListener('click', next);
   }
@@ -171,7 +172,7 @@ export function mount(container) {
         <div class="quiz-word">${escapeHtml(promptText(card))}</div>
         <form id="typing-form" class="typing-form">
           <input type="text" id="typing-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${placeholder}" />
-          <button type="submit" class="btn btn-huge btn-primary">Prüfen</button>
+          <button type="submit" class="btn btn-huge btn-primary btn-with-icon"><span class="icon-inline-wrap icon-lg">${checkCircleIcon}</span> Prüfen</button>
         </form>
       </div>`;
 
@@ -195,8 +196,8 @@ export function mount(container) {
         ${progressBarHtml(index, queue.length)}
         <div class="quiz-word">${escapeHtml(promptText(card))}</div>
         <p class="typing-answer ${correct ? 'correct' : 'incorrect'}">${escapeHtml(value) || '–'}</p>
-        <p class="hint">${correct ? '✅ Richtig!' : `❌ Richtig wäre: ${escapeHtml(correctAnswer)}`}</p>
-        <button class="btn btn-huge btn-primary" id="next-btn">Weiter ▶️</button>
+        <p class="hint btn-with-icon"><span class="icon-inline-wrap">${correct ? checkCircleIcon : xCircleIcon}</span> ${correct ? 'Richtig!' : `Richtig wäre: ${escapeHtml(correctAnswer)}`}</p>
+        <button class="btn btn-huge btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap icon-lg">${playIcon}</span></button>
       </div>`;
     container.querySelector('#next-btn').addEventListener('click', next);
   }

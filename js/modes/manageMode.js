@@ -2,6 +2,7 @@ import { vocabStore } from '../data/vocabStore.js';
 import { parseCsv } from '../csv/csvImport.js';
 import { authService } from '../auth/authService.js';
 import { syncService } from '../data/syncService.js';
+import { trashIcon, searchIcon } from '../ui/icons.js';
 
 function filterVocab(list, query) {
   const q = query.trim().toLowerCase();
@@ -24,7 +25,7 @@ function renderVocabRowsHtml(list) {
       ${byCategory[cat].map((v) => `
         <div class="vocab-row" data-id="${v.id}">
           <span>${escapeHtml(v.en)} – ${escapeHtml(v.de)}</span>
-          <button class="btn btn-icon delete-btn" data-id="${v.id}" aria-label="Löschen">🗑️</button>
+          <button class="btn btn-icon delete-btn" data-id="${v.id}" aria-label="Löschen"><span class="icon-inline-wrap">${trashIcon}</span></button>
         </div>
       `).join('')}
     </div>
@@ -89,14 +90,17 @@ export function mount(container) {
 
         <section>
           <h3>Vokabeln (<span id="vocab-count">${filtered.length}</span>)</h3>
-          <input type="text" id="vocab-search" class="search-input" placeholder="🔍 Suchen (Englisch oder Deutsch) …" value="${escapeHtml(searchQuery)}" />
+          <div class="search-wrap">
+            <span class="icon-inline-wrap search-icon">${searchIcon}</span>
+            <input type="text" id="vocab-search" class="search-input" placeholder="Suchen (Englisch oder Deutsch) …" value="${escapeHtml(searchQuery)}" />
+          </div>
           <div class="vocab-list" id="vocab-list-container">${renderVocabRowsHtml(filtered)}</div>
         </section>
 
         <section>
           <h3>Alle Vokabeln löschen</h3>
           <p class="hint">Löscht deine komplette Vokabelliste unwiderruflich (inkl. Lernfortschritt) — z. B. um danach nur eine eigene CSV frisch zu importieren.</p>
-          <button class="btn btn-danger" id="delete-all-btn">🗑️ Alle Vokabeln löschen</button>
+          <button class="btn btn-danger btn-with-icon" id="delete-all-btn"><span class="icon-inline-wrap">${trashIcon}</span> Alle Vokabeln löschen</button>
         </section>
       </div>`;
 

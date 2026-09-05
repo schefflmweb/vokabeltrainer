@@ -5,7 +5,10 @@ import { speechInputService } from '../stt/speechInputService.js';
 import { toneService } from '../audio/toneService.js';
 import { progressBarHtml } from '../ui/progressBar.js';
 import { flagGB, flagDE } from '../ui/flags.js';
-import { playIcon } from '../ui/icons.js';
+import {
+  playIcon, tapIcon, micIcon, warningIcon, hourglassIcon, refreshIcon, starIcon,
+  thinkingIcon, speakerIcon, xCircleIcon, checkCircleIcon, errorIcon, skipIcon
+} from '../ui/icons.js';
 
 const SESSION_SIZE = 15;
 const LISTEN_TIMEOUT_MS = 5000;
@@ -306,15 +309,17 @@ export function mount(container) {
 
         <p class="hint">Eingabeart</p>
         <div class="direction-toggle">
-          <button class="btn toggle-btn ${interactionMode === 'tap' ? 'active' : ''}" id="mode-tap">👆 Antippen</button>
-          <button class="btn toggle-btn ${interactionMode === 'voice' ? 'active' : ''}" id="mode-voice" ${voiceSupported ? '' : 'disabled'}>🎤 Sprechen</button>
+          <button class="btn toggle-btn ${interactionMode === 'tap' ? 'active' : ''}" id="mode-tap"><span class="icon-inline-wrap">${tapIcon}</span> Antippen</button>
+          <button class="btn toggle-btn ${interactionMode === 'voice' ? 'active' : ''}" id="mode-voice" ${voiceSupported ? '' : 'disabled'}><span class="icon-inline-wrap">${micIcon}</span> Sprechen</button>
         </div>
         ${voiceSupported ? '' : '<p class="hint">Spracheingabe wird von diesem Browser nicht unterstützt.</p>'}
-        ${interactionMode === 'voice' ? '<p class="hint">⚠️ Funktioniert nur, wenn die Seite direkt in Safari geöffnet ist (nicht das installierte Icon vom Home-Bildschirm).</p>' : ''}
+        ${interactionMode === 'voice' ? `<p class="hint"><span class="icon-inline-wrap">${warningIcon}</span> Funktioniert nur, wenn die Seite direkt in Safari geöffnet ist (nicht das installierte Icon vom Home-Bildschirm).</p>` : ''}
 
         <p class="hint">Auto-Modus: pro Karte ein großer Tap. Kein Hinsehen nötig.</p>
-        <button class="btn btn-huge btn-primary" id="start-btn" ${ready ? '' : 'disabled'}>
-          ${ready ? `<span class="icon-inline-wrap">${playIcon}</span> Los geht's` : '⏳ Lädt …'}
+        <button class="btn btn-huge btn-primary btn-with-icon" id="start-btn" ${ready ? '' : 'disabled'}>
+          ${ready
+            ? `<span class="icon-inline-wrap icon-lg">${playIcon}</span> Los geht's`
+            : `<span class="icon-inline-wrap icon-lg">${hourglassIcon}</span> Lädt …`}
         </button>
       </div>`;
     container.querySelector('#dir-en-de').addEventListener('click', () => setDirection('en-de'));
@@ -328,10 +333,12 @@ export function mount(container) {
     const ready = !!pendingQueue;
     container.innerHTML = `
       <div class="audio-mode pad center">
-        <h2>Runde fertig! 🎉</h2>
+        <h2 class="btn-with-icon"><span class="icon-inline-wrap icon-lg">${starIcon}</span> Runde fertig!</h2>
         <p class="hint">${stats.known} gewusst · ${stats.unknown} nochmal üben</p>
-        <button class="btn btn-huge btn-primary" id="again-btn" ${ready ? '' : 'disabled'}>
-          ${ready ? '🔄 Neue Runde' : '⏳ Lädt …'}
+        <button class="btn btn-huge btn-primary btn-with-icon" id="again-btn" ${ready ? '' : 'disabled'}>
+          ${ready
+            ? `<span class="icon-inline-wrap icon-lg">${refreshIcon}</span> Neue Runde`
+            : `<span class="icon-inline-wrap icon-lg">${hourglassIcon}</span> Lädt …`}
         </button>
         <button class="btn btn-secondary" id="switch-btn">Modus wechseln</button>
       </div>`;
@@ -343,7 +350,7 @@ export function mount(container) {
     const card = currentCard();
     const secondaryHtml = tapRevealed
       ? escapeHtml(secondaryText(card))
-      : '🤔 Zeit zum Nachdenken …';
+      : `<span class="icon-inline-wrap">${thinkingIcon}</span> Zeit zum Nachdenken …`;
     container.innerHTML = `
       <div class="audio-mode">
         ${progressBarHtml(index, queue.length)}
@@ -351,10 +358,10 @@ export function mount(container) {
           <div class="card-primary">${escapeHtml(primaryText(card))}</div>
           <div class="card-secondary ${tapRevealed ? '' : 'reveal-pending'}">${secondaryHtml}</div>
         </div>
-        <button class="btn btn-secondary" id="replay-btn">🔊 Nochmal anhören</button>
+        <button class="btn btn-secondary btn-with-icon" id="replay-btn"><span class="icon-inline-wrap">${speakerIcon}</span> Nochmal anhören</button>
         <div class="rate-buttons">
-          <button class="btn btn-huge btn-danger" id="unknown-btn">❌ Nochmal üben</button>
-          <button class="btn btn-huge btn-success" id="known-btn">✅ Kannte ich</button>
+          <button class="btn btn-huge btn-danger btn-with-icon" id="unknown-btn"><span class="icon-inline-wrap icon-lg">${xCircleIcon}</span> Nochmal üben</button>
+          <button class="btn btn-huge btn-success btn-with-icon" id="known-btn"><span class="icon-inline-wrap icon-lg">${checkCircleIcon}</span> Kannte ich</button>
         </div>
       </div>`;
 
@@ -373,7 +380,7 @@ export function mount(container) {
           <div class="card-display">
             <div class="card-primary">${escapeHtml(primaryText(card))}</div>
           </div>
-          <p class="hint mic-status">🔊 Wort wird vorgelesen …</p>
+          <p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap icon-lg">${speakerIcon}</span> Wort wird vorgelesen …</p>
         </div>`;
       return;
     }
@@ -385,8 +392,8 @@ export function mount(container) {
           <div class="card-display">
             <div class="card-primary">${escapeHtml(primaryText(card))}</div>
           </div>
-          <p class="hint mic-status">🎙️ Höre zu … jetzt sprechen!</p>
-          <button class="btn btn-secondary" id="skip-btn">⏭️ Überspringen</button>
+          <p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap icon-lg">${micIcon}</span> Höre zu … jetzt sprechen!</p>
+          <button class="btn btn-secondary btn-with-icon" id="skip-btn"><span class="icon-inline-wrap">${skipIcon}</span> Überspringen</button>
         </div>`;
       container.querySelector('#skip-btn').addEventListener('click', skipListening);
       return;
@@ -399,9 +406,9 @@ export function mount(container) {
           <div class="card-display">
             <div class="card-primary">${escapeHtml(primaryText(card))}</div>
           </div>
-          <p class="hint">🚫 ${escapeHtml(voiceErrorMessage)}</p>
-          <button class="btn btn-secondary" id="retry-btn">🎤 Erneut versuchen</button>
-          <button class="btn btn-huge btn-primary" id="next-btn">Weiter ▶️</button>
+          <p class="hint btn-with-icon"><span class="icon-inline-wrap">${errorIcon}</span> ${escapeHtml(voiceErrorMessage)}</p>
+          <button class="btn btn-secondary btn-with-icon" id="retry-btn"><span class="icon-inline-wrap">${micIcon}</span> Erneut versuchen</button>
+          <button class="btn btn-huge btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap icon-lg">${playIcon}</span></button>
         </div>`;
       container.querySelector('#retry-btn').addEventListener('click', retryListening);
       container.querySelector('#next-btn').addEventListener('click', advanceCard);
@@ -410,6 +417,7 @@ export function mount(container) {
 
     // voiceState === 'result'
     const { transcript, correct, expected } = voiceResult;
+    const resultIcon = correct ? checkCircleIcon : xCircleIcon;
     container.innerHTML = `
       <div class="audio-mode">
         ${progressBarHtml(index, queue.length)}
@@ -417,9 +425,9 @@ export function mount(container) {
           <div class="card-primary">${escapeHtml(primaryText(card))}</div>
         </div>
         <p class="typing-answer ${correct ? 'correct' : 'incorrect'}">${escapeHtml(transcript) || '(keine Antwort erkannt)'}</p>
-        <p class="hint">${correct ? '✅ Richtig!' : `❌ Richtig wäre: ${escapeHtml(expected)}`}</p>
-        <button class="btn btn-secondary" id="replay-btn">🔊 Antwort anhören</button>
-        <button class="btn btn-huge btn-primary" id="next-btn">Weiter ▶️</button>
+        <p class="hint btn-with-icon"><span class="icon-inline-wrap">${resultIcon}</span> ${correct ? 'Richtig!' : `Richtig wäre: ${escapeHtml(expected)}`}</p>
+        <button class="btn btn-secondary btn-with-icon" id="replay-btn"><span class="icon-inline-wrap">${speakerIcon}</span> Antwort anhören</button>
+        <button class="btn btn-huge btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap icon-lg">${playIcon}</span></button>
       </div>`;
     container.querySelector('#replay-btn').addEventListener('click', replay);
     container.querySelector('#next-btn').addEventListener('click', advanceCard);

@@ -290,9 +290,10 @@ body {
 
 .icon-inline-wrap {
   display: inline-flex;
-  width: 30px;
-  height: 30px;
-  vertical-align: -9px;
+  width: 20px;
+  height: 20px;
+  vertical-align: -5px;
+  flex-shrink: 0;
 }
 
 .icon-inline-wrap svg {
@@ -300,19 +301,35 @@ body {
   height: 100%;
 }
 
-#start-btn {
+.icon-inline-wrap.icon-lg {
+  width: 30px;
+  height: 30px;
+  vertical-align: -9px;
+}
+
+/* Buttons that pair an icon with text (huge or otherwise) center them via flex
+   rather than relying on vertical-align, so alignment stays correct
+   regardless of icon/font size. */
+.btn-with-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
+}
+
+.btn-with-icon .icon-inline-wrap {
+  vertical-align: 0;
+}
+
+#start-btn {
   font-weight: 400;
   font-size: 1.85rem;
+  gap: 10px;
 }
 
 #start-btn .icon-inline-wrap {
   width: 42px;
   height: 42px;
-  vertical-align: 0;
 }
 
 /* --- Audio mode (car use): oversized, high-contrast, minimal reading --- */
@@ -562,15 +579,28 @@ textarea:focus {
   color: var(--text-muted);
 }
 
+.search-wrap {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.search-wrap .search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
 .search-input {
   background: var(--bg-elevated-2);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 40px;
   font-size: 1rem;
   width: 100%;
-  margin-bottom: 10px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 

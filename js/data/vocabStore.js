@@ -57,10 +57,11 @@ export const vocabStore = {
   async getDue(limit = 20, now = Date.now()) {
     const all = await this.getAll();
     const due = all.filter((v) => v.srs.dueDate <= now);
-    due.sort((a, b) => a.srs.dueDate - b.srs.dueDate);
-    if (due.length > 0) return due.slice(0, limit);
-    // Nothing due: fall back to a random sample so a session is always possible.
-    const shuffled = [...all].sort(() => Math.random() - 0.5);
+    // Shuffled, not sorted by dueDate: freshly-seeded/imported words share
+    // (near-)identical timestamps, so sorting left the due pool in a fixed
+    // order and sessions kept showing the same first N cards every time.
+    const pool = due.length > 0 ? due : all; // nothing due -> practice from everything
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, limit);
   },
 

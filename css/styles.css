@@ -1,21 +1,24 @@
 :root {
-  --bg: #0b1220;
-  --bg-elevated: #161f33;
-  --bg-elevated-2: #1c2740;
-  --text: #f1f5f9;
-  --text-muted: #94a3b8;
-  --accent: #38bdf8;
-  --accent-2: #22d3ee;
-  --accent-gradient: linear-gradient(135deg, #38bdf8 0%, #22d3ee 100%);
-  --success: #22c55e;
-  --success-2: #4ade80;
-  --success-gradient: linear-gradient(135deg, #22c55e 0%, #4ade80 100%);
-  --danger: #ef4444;
-  --danger-2: #f87171;
-  --danger-gradient: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
-  --border: #263049;
-  --shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
-  --shadow-sm: 0 3px 10px rgba(0, 0, 0, 0.28);
+  --bg: #faf9ff;
+  --bg-elevated: #ffffff;
+  --bg-elevated-2: #f4f1fc;
+  --text: #332f4d;
+  --text-muted: #918dae;
+  --accent: #a78bfa;
+  --accent-2: #7dd3fc;
+  --accent-text: #4c3aa8;
+  --accent-gradient: linear-gradient(135deg, #c4b5fd 0%, #93c5fd 100%);
+  --success: #34d399;
+  --success-2: #6ee7b7;
+  --success-text: #06603f;
+  --success-gradient: linear-gradient(135deg, #86efac 0%, #5eead4 100%);
+  --danger: #fb7185;
+  --danger-2: #fca5a5;
+  --danger-text: #9d174d;
+  --danger-gradient: linear-gradient(135deg, #fda4af 0%, #fecaca 100%);
+  --border: #e9e5f8;
+  --shadow: 0 16px 34px rgba(140, 121, 214, 0.16);
+  --shadow-sm: 0 4px 16px rgba(140, 121, 214, 0.12);
 }
 
 * {
@@ -29,8 +32,9 @@ html, body {
 
 body {
   background:
-    radial-gradient(1100px 700px at 15% -10%, #1a2744 0%, transparent 55%),
-    radial-gradient(900px 600px at 100% 0%, #14213a 0%, transparent 50%),
+    radial-gradient(900px 620px at 8% -8%, #ede9fe 0%, transparent 55%),
+    radial-gradient(900px 620px at 100% 0%, #e0f2fe 0%, transparent 52%),
+    radial-gradient(760px 560px at 50% 105%, #fce7f3 0%, transparent 48%),
     var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -43,16 +47,16 @@ body {
 }
 
 .app-header {
-  padding: 16px 16px 8px;
+  padding: 18px 16px 8px;
   text-align: center;
 }
 
 .app-header h1 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.1rem;
   font-weight: 800;
   letter-spacing: 0.02em;
-  background: var(--accent-gradient);
+  background: linear-gradient(135deg, #8b5cf6 0%, #38bdf8 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -86,7 +90,9 @@ body {
 .app-nav {
   display: flex;
   border-top: 1px solid var(--border);
-  background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg) 100%);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -103,7 +109,7 @@ body {
 }
 
 .nav-btn.active {
-  color: var(--accent-2);
+  color: var(--accent-text);
   font-weight: 700;
 }
 
@@ -121,7 +127,7 @@ body {
 
 .btn {
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 16px;
   padding: 14px 20px;
   font-size: 1rem;
   cursor: pointer;
@@ -145,9 +151,9 @@ body {
 .btn-primary {
   background: var(--accent-gradient);
   border-color: transparent;
-  color: #072436;
+  color: var(--accent-text);
   font-weight: 700;
-  box-shadow: 0 8px 22px rgba(56, 189, 248, 0.32);
+  box-shadow: 0 10px 24px rgba(167, 139, 250, 0.35);
 }
 
 .btn-secondary {
@@ -157,24 +163,24 @@ body {
 .btn-success {
   background: var(--success-gradient);
   border-color: transparent;
-  color: #052e12;
+  color: var(--success-text);
   font-weight: 700;
-  box-shadow: 0 8px 22px rgba(34, 197, 94, 0.3);
+  box-shadow: 0 10px 24px rgba(52, 211, 153, 0.32);
 }
 
 .btn-danger {
   background: var(--danger-gradient);
   border-color: transparent;
-  color: #2b0505;
+  color: var(--danger-text);
   font-weight: 700;
-  box-shadow: 0 8px 22px rgba(239, 68, 68, 0.3);
+  box-shadow: 0 10px 24px rgba(251, 113, 133, 0.3);
 }
 
 .btn-huge {
   width: 100%;
   min-height: 25vh;
   font-size: 1.6rem;
-  border-radius: 22px;
+  border-radius: 26px;
 }
 
 .btn-icon {
@@ -188,7 +194,8 @@ body {
 .btn-primary .hint,
 .btn-success .hint,
 .btn-danger .hint {
-  color: rgba(7, 36, 54, 0.7);
+  color: inherit;
+  opacity: 0.75;
 }
 
 .btn-huge .hint {
@@ -215,7 +222,7 @@ body {
 
 .progress-wrap {
   height: 6px;
-  background: var(--bg-elevated);
+  background: var(--bg-elevated-2);
   border-radius: 999px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -253,7 +260,7 @@ body {
 .toggle-btn.active {
   background: var(--accent-gradient);
   border-color: transparent;
-  color: #072436;
+  color: var(--accent-text);
   font-weight: 700;
 }
 
@@ -275,9 +282,9 @@ body {
   justify-content: center;
   gap: 10px;
   padding: 36px 16px;
-  background: linear-gradient(160deg, var(--bg-elevated-2) 0%, var(--bg-elevated) 100%);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 22px;
+  border-radius: 26px;
   box-shadow: var(--shadow);
   position: relative;
   overflow: hidden;
@@ -289,14 +296,14 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  height: 4px;
+  height: 5px;
   background: var(--accent-gradient);
 }
 
 @keyframes pulseCorrect {
-  0% { box-shadow: var(--shadow), 0 0 0 0 rgba(34, 197, 94, 0.55); }
-  70% { box-shadow: var(--shadow), 0 0 0 18px rgba(34, 197, 94, 0); }
-  100% { box-shadow: var(--shadow), 0 0 0 0 rgba(34, 197, 94, 0); }
+  0% { box-shadow: var(--shadow), 0 0 0 0 rgba(52, 211, 153, 0.5); }
+  70% { box-shadow: var(--shadow), 0 0 0 18px rgba(52, 211, 153, 0); }
+  100% { box-shadow: var(--shadow), 0 0 0 0 rgba(52, 211, 153, 0); }
 }
 
 .card-display.pulse-correct {
@@ -362,9 +369,9 @@ body {
   font-weight: 800;
   text-align: center;
   padding: 24px;
-  background: linear-gradient(160deg, var(--bg-elevated-2) 0%, var(--bg-elevated) 100%);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 22px;
   box-shadow: var(--shadow-sm);
 }
 
@@ -382,15 +389,15 @@ body {
 .btn-option.correct {
   background: var(--success-gradient);
   border-color: transparent;
-  color: #052e12;
-  box-shadow: 0 8px 22px rgba(34, 197, 94, 0.3);
+  color: var(--success-text);
+  box-shadow: 0 10px 24px rgba(52, 211, 153, 0.3);
 }
 
 .btn-option.incorrect {
   background: var(--danger-gradient);
   border-color: transparent;
-  color: #2b0505;
-  box-shadow: 0 8px 22px rgba(239, 68, 68, 0.3);
+  color: var(--danger-text);
+  box-shadow: 0 10px 24px rgba(251, 113, 133, 0.3);
 }
 
 .btn-option.disabled {
@@ -407,7 +414,7 @@ body {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   color: var(--text);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 14px 16px;
   font-size: 1.3rem;
   text-align: center;
@@ -418,7 +425,7 @@ body {
 .typing-form input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.25);
 }
 
 .typing-answer {
@@ -426,7 +433,7 @@ body {
   font-size: 1.3rem;
   font-weight: 700;
   padding: 14px;
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   animation: fadeIn 0.25s ease;
@@ -435,13 +442,13 @@ body {
 .typing-answer.correct {
   background: var(--success-gradient);
   border-color: transparent;
-  color: #052e12;
+  color: var(--success-text);
 }
 
 .typing-answer.incorrect {
   background: var(--danger-gradient);
   border-color: transparent;
-  color: #2b0505;
+  color: var(--danger-text);
 }
 
 /* --- Manage mode --- */
@@ -450,8 +457,8 @@ body {
   margin-bottom: 20px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 16px;
+  border-radius: 22px;
+  padding: 18px;
   box-shadow: var(--shadow-sm);
 }
 
@@ -459,12 +466,13 @@ body {
   margin: 0 0 10px;
   font-size: 1rem;
   letter-spacing: 0.01em;
+  color: var(--accent-text);
 }
 
 /* Same specificity as ".manage-mode section" (class + type) so this actually
    overrides the flat background instead of losing to source order. */
 section.account-box {
-  background: linear-gradient(160deg, var(--bg-elevated-2) 0%, var(--bg-elevated) 100%);
+  background: linear-gradient(160deg, #f3effc 0%, var(--bg-elevated) 100%);
   margin-bottom: 20px;
 }
 
@@ -484,7 +492,7 @@ textarea {
   background: var(--bg-elevated-2);
   border: 1px solid var(--border);
   color: var(--text);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 10px 12px;
   font-size: 1rem;
   width: 100%;
@@ -495,7 +503,7 @@ textarea {
 textarea:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.25);
 }
 
 #csv-file {
@@ -521,11 +529,11 @@ textarea:focus {
   justify-content: space-between;
   align-items: center;
   padding: 9px 8px;
-  border-radius: 10px;
+  border-radius: 12px;
   border-bottom: 1px solid var(--border);
   transition: background 0.15s ease;
 }
 
 .vocab-row:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-elevated-2);
 }

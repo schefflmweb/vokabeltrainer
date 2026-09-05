@@ -2,7 +2,7 @@
 // (see SETUP-ONEDRIVE.md in the project root for step-by-step instructions).
 // Until a real value is set, OneDrive sync stays disabled and the app runs
 // fully offline from local storage only.
-export const CLIENT_ID = 'REPLACE_WITH_YOUR_AZURE_APP_CLIENT_ID';
+export const CLIENT_ID = '52197aea-2859-4299-8582-3e1bf4bc3997';
 
 export const authConfig = {
   auth: {

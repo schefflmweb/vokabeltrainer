@@ -20,7 +20,6 @@ const APP_SHELL = [
   './js/modes/quizMode.js',
   './js/modes/manageMode.js',
   './js/csv/csvImport.js',
-  './data/starter-vocab.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',

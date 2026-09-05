@@ -1,4 +1,3 @@
-import { vocabStore } from './data/vocabStore.js';
 import { authService } from './auth/authService.js';
 import { syncService } from './data/syncService.js';
 import * as audioMode from './modes/audioMode.js';
@@ -39,7 +38,6 @@ if ('serviceWorker' in navigator) {
 }
 
 async function main() {
-  await vocabStore.ensureSeeded();
   await authService.ready();
   triggerSync();
 

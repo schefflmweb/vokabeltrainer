@@ -23,28 +23,6 @@ function applyUpdate(record, { de, category, example }) {
 }
 
 export const vocabStore = {
-  async ensureSeeded() {
-    const count = await db.count();
-    if (count > 0) return;
-    const res = await fetch('./data/starter-vocab.json');
-    const starter = await res.json();
-    const now = Date.now();
-    const records = starter.map((w) => ({
-      id: w.id,
-      en: w.en,
-      de: w.de,
-      category: w.category || 'Sonstiges',
-      example: w.example || '',
-      source: 'starter',
-      deleted: false,
-      createdAt: now,
-      updatedAt: now,
-      dirty: true,
-      srs: defaultSrs()
-    }));
-    await db.putAll(records);
-  },
-
   async getAll() {
     const all = await db.getAll();
     return all.filter((v) => !v.deleted);

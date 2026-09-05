@@ -23,7 +23,8 @@ const APP_SHELL = [
   './data/starter-vocab.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/apple-touch-icon.png'
+  './icons/apple-touch-icon.png',
+  './icons/favicon-64.png'
 ];
 
 self.addEventListener('install', (event) => {

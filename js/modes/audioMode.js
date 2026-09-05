@@ -5,6 +5,7 @@ import { speechInputService } from '../stt/speechInputService.js';
 import { toneService } from '../audio/toneService.js';
 import { progressBarHtml } from '../ui/progressBar.js';
 import { flagGB, flagDE } from '../ui/flags.js';
+import { playIcon } from '../ui/icons.js';
 
 const SESSION_SIZE = 15;
 const LISTEN_TIMEOUT_MS = 5000;
@@ -313,7 +314,7 @@ export function mount(container) {
 
         <p class="hint">Auto-Modus: pro Karte ein großer Tap. Kein Hinsehen nötig.</p>
         <button class="btn btn-huge btn-primary" id="start-btn" ${ready ? '' : 'disabled'}>
-          ${ready ? "▶️ Los geht's" : '⏳ Lädt …'}
+          ${ready ? `<span class="icon-inline-wrap">${playIcon}</span> Los geht's` : '⏳ Lädt …'}
         </button>
       </div>`;
     container.querySelector('#dir-en-de').addEventListener('click', () => setDirection('en-de'));

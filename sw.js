@@ -15,6 +15,7 @@ const APP_SHELL = [
   './js/audio/toneService.js',
   './js/ui/progressBar.js',
   './js/ui/flags.js',
+  './js/ui/icons.js',
   './js/modes/audioMode.js',
   './js/modes/quizMode.js',
   './js/modes/manageMode.js',

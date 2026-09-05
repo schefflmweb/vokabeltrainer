@@ -1,5 +1,6 @@
 import { vocabStore } from '../data/vocabStore.js';
 import { syncService } from '../data/syncService.js';
+import { progressBarHtml } from '../ui/progressBar.js';
 
 const SESSION_SIZE = 15;
 
@@ -121,7 +122,7 @@ export function mount(container) {
     const options = buildOptions(card);
     container.innerHTML = `
       <div class="quiz-mode">
-        <div class="progress">${index + 1} / ${queue.length}</div>
+        ${progressBarHtml(index, queue.length)}
         <div class="quiz-word">${escapeHtml(promptText(card))}</div>
         <div class="quiz-options">
           ${options.map((opt, i) => `<button class="btn btn-option" data-opt="${i}">${escapeHtml(opt)}</button>`).join('')}
@@ -144,7 +145,7 @@ export function mount(container) {
     const correctAnswer = answerText(card);
     container.innerHTML = `
       <div class="quiz-mode">
-        <div class="progress">${index + 1} / ${queue.length}</div>
+        ${progressBarHtml(index, queue.length)}
         <div class="quiz-word">${escapeHtml(promptText(card))}</div>
         <div class="quiz-options">
           ${options.map((opt) => {
@@ -165,7 +166,7 @@ export function mount(container) {
     const placeholder = direction === 'en-de' ? 'Deutsche Übersetzung' : 'Englische Übersetzung';
     container.innerHTML = `
       <div class="quiz-mode">
-        <div class="progress">${index + 1} / ${queue.length}</div>
+        ${progressBarHtml(index, queue.length)}
         <div class="quiz-word">${escapeHtml(promptText(card))}</div>
         <form id="typing-form" class="typing-form">
           <input type="text" id="typing-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${placeholder}" />
@@ -190,7 +191,7 @@ export function mount(container) {
     const correctAnswer = answerText(card);
     container.innerHTML = `
       <div class="quiz-mode">
-        <div class="progress">${index + 1} / ${queue.length}</div>
+        ${progressBarHtml(index, queue.length)}
         <div class="quiz-word">${escapeHtml(promptText(card))}</div>
         <p class="typing-answer ${correct ? 'correct' : 'incorrect'}">${escapeHtml(value) || '–'}</p>
         <p class="hint">${correct ? '✅ Richtig!' : `❌ Richtig wäre: ${escapeHtml(correctAnswer)}`}</p>

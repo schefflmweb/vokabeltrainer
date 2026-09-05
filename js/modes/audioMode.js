@@ -3,6 +3,7 @@ import { ttsService } from '../tts/ttsService.js';
 import { syncService } from '../data/syncService.js';
 import { speechInputService } from '../stt/speechInputService.js';
 import { toneService } from '../audio/toneService.js';
+import { progressBarHtml } from '../ui/progressBar.js';
 
 const SESSION_SIZE = 15;
 const LISTEN_TIMEOUT_MS = 5000;
@@ -343,7 +344,7 @@ export function mount(container) {
       : '🤔 Zeit zum Nachdenken …';
     container.innerHTML = `
       <div class="audio-mode">
-        <div class="progress">${index + 1} / ${queue.length}</div>
+        ${progressBarHtml(index, queue.length)}
         <div class="card-display">
           <div class="card-primary">${escapeHtml(primaryText(card))}</div>
           <div class="card-secondary ${tapRevealed ? '' : 'reveal-pending'}">${secondaryHtml}</div>
@@ -366,7 +367,7 @@ export function mount(container) {
     if (voiceState === 'speaking') {
       container.innerHTML = `
         <div class="audio-mode">
-          <div class="progress">${index + 1} / ${queue.length}</div>
+          ${progressBarHtml(index, queue.length)}
           <div class="card-display">
             <div class="card-primary">${escapeHtml(primaryText(card))}</div>
           </div>
@@ -378,7 +379,7 @@ export function mount(container) {
     if (voiceState === 'listening') {
       container.innerHTML = `
         <div class="audio-mode">
-          <div class="progress">${index + 1} / ${queue.length}</div>
+          ${progressBarHtml(index, queue.length)}
           <div class="card-display">
             <div class="card-primary">${escapeHtml(primaryText(card))}</div>
           </div>
@@ -392,7 +393,7 @@ export function mount(container) {
     if (voiceState === 'error') {
       container.innerHTML = `
         <div class="audio-mode">
-          <div class="progress">${index + 1} / ${queue.length}</div>
+          ${progressBarHtml(index, queue.length)}
           <div class="card-display">
             <div class="card-primary">${escapeHtml(primaryText(card))}</div>
           </div>
@@ -409,8 +410,8 @@ export function mount(container) {
     const { transcript, correct, expected } = voiceResult;
     container.innerHTML = `
       <div class="audio-mode">
-        <div class="progress">${index + 1} / ${queue.length}</div>
-        <div class="card-display">
+        ${progressBarHtml(index, queue.length)}
+        <div class="card-display ${correct ? 'pulse-correct' : 'shake-incorrect'}">
           <div class="card-primary">${escapeHtml(primaryText(card))}</div>
         </div>
         <p class="typing-answer ${correct ? 'correct' : 'incorrect'}">${escapeHtml(transcript) || '(keine Antwort erkannt)'}</p>

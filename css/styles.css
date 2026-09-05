@@ -1,0 +1,289 @@
+:root {
+  --bg: #0f172a;
+  --bg-elevated: #1e293b;
+  --text: #f1f5f9;
+  --text-muted: #94a3b8;
+  --accent: #38bdf8;
+  --success: #22c55e;
+  --danger: #ef4444;
+  --border: #334155;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  overscroll-behavior-y: contain;
+}
+
+.app-header {
+  padding: 12px 16px 4px;
+  text-align: center;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.app-view {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.pad {
+  padding: 16px;
+}
+
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 60vh;
+  gap: 16px;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.app-nav {
+  display: flex;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.nav-btn {
+  flex: 1;
+  padding: 14px 8px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.nav-btn.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.btn {
+  border: none;
+  border-radius: 12px;
+  padding: 14px 20px;
+  font-size: 1rem;
+  cursor: pointer;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.btn-secondary {
+  background: var(--bg-elevated);
+}
+
+.btn-success {
+  background: var(--success);
+  color: #052e12;
+  font-weight: 700;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #2b0505;
+  font-weight: 700;
+}
+
+.btn-huge {
+  width: 100%;
+  min-height: 25vh;
+  font-size: 1.6rem;
+  border-radius: 20px;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  padding: 4px 10px;
+}
+
+/* --- Audio mode (car use): oversized, high-contrast, minimal reading --- */
+
+.audio-mode {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px;
+  gap: 12px;
+}
+
+.progress {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.card-display {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  background: var(--bg-elevated);
+  border-radius: 20px;
+}
+
+.card-en {
+  font-size: 2.4rem;
+  font-weight: 700;
+}
+
+.card-de {
+  font-size: 1.6rem;
+  color: var(--text-muted);
+}
+
+.rate-buttons {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+}
+
+.rate-buttons .btn-huge {
+  flex: 1;
+}
+
+/* --- Quiz mode --- */
+
+.quiz-mode {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.quiz-word {
+  font-size: 2rem;
+  font-weight: 700;
+  text-align: center;
+  padding: 24px;
+}
+
+.quiz-options {
+  display: grid;
+  gap: 10px;
+}
+
+.btn-option {
+  padding: 16px;
+  font-size: 1.1rem;
+  text-align: left;
+}
+
+.btn-option.correct {
+  background: var(--success);
+  color: #052e12;
+}
+
+.btn-option.incorrect {
+  background: var(--danger);
+  color: #2b0505;
+}
+
+.btn-option.disabled {
+  opacity: 0.9;
+}
+
+/* --- Manage mode --- */
+
+.manage-mode section {
+  margin-bottom: 28px;
+}
+
+.manage-mode h3 {
+  margin-bottom: 8px;
+}
+
+.account-box {
+  background: var(--bg-elevated);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.account-box .btn {
+  margin-right: 8px;
+  margin-top: 8px;
+}
+
+.add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.add-form input,
+textarea {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 1rem;
+  width: 100%;
+}
+
+#csv-file {
+  margin-bottom: 8px;
+}
+
+.vocab-list {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.vocab-category h4 {
+  color: var(--text-muted);
+  margin: 16px 0 6px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.vocab-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+}

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Vokabeltrainer</title>
+<meta name="description" content="Englisch-Vokabeln lernen – im Auto per Sprachausgabe, zuhause im Quiz." />
+<meta name="theme-color" content="#0f172a" />
+<link rel="manifest" href="./manifest.webmanifest" />
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Vokabeln" />
+<link rel="stylesheet" href="./css/styles.css" />
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@5.21.0/lib/msal-browser.min.js" defer></script>
+</head>
+<body>
+<header class="app-header">
+  <h1>Vokabeltrainer</h1>
+</header>
+
+<main id="view" class="app-view" aria-live="polite"></main>
+
+<nav class="app-nav">
+  <button class="nav-btn" data-mode="audio">🚗 Auto</button>
+  <button class="nav-btn" data-mode="quiz">🧠 Quiz</button>
+  <button class="nav-btn" data-mode="manage">📋 Verwalten</button>
+</nav>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

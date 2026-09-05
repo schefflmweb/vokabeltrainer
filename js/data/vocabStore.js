@@ -1,9 +1,25 @@
 import { db } from './db.js';
 import { defaultSrs, schedule } from '../srs/scheduler.js';
 
+let idCounter = 0;
 function makeId(en) {
   const slug = en.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  return `custom-${slug}-${Date.now().toString(36)}`;
+  idCounter += 1;
+  return `custom-${slug}-${Date.now().toString(36)}-${idCounter.toString(36)}`;
+}
+
+function normalizeEn(en) {
+  return en.trim().toLowerCase();
+}
+
+/** Refreshes translation/category/example on an existing record without touching its learning progress. */
+function applyUpdate(record, { de, category, example }) {
+  record.de = de.trim();
+  if (category?.trim()) record.category = category.trim();
+  if (example?.trim()) record.example = example.trim();
+  record.updatedAt = Date.now();
+  record.dirty = true;
+  return record;
 }
 
 export const vocabStore = {
@@ -48,7 +64,17 @@ export const vocabStore = {
     return shuffled.slice(0, limit);
   },
 
+  /** Adds a vocab entry, or updates the existing one (by English word, case-insensitive) if it already exists — never creates a duplicate. Learning progress on an updated entry is preserved. */
   async add({ en, de, category, example }) {
+    const all = await db.getAll();
+    const target = normalizeEn(en);
+    const existing = all.find((v) => !v.deleted && normalizeEn(v.en) === target);
+    if (existing) {
+      applyUpdate(existing, { de, category, example });
+      await db.put(existing);
+      return existing;
+    }
+
     const now = Date.now();
     const record = {
       id: makeId(en),
@@ -67,23 +93,41 @@ export const vocabStore = {
     return record;
   },
 
+  /** Same dedup behavior as add(), batched — used by CSV import. Returns which entries were newly added vs. updated. */
   async addMany(entries) {
+    const all = await db.getAll();
+    const byEn = new Map(all.filter((v) => !v.deleted).map((v) => [normalizeEn(v.en), v]));
     const now = Date.now();
-    const records = entries.map((e) => ({
-      id: makeId(e.en),
-      en: e.en.trim(),
-      de: e.de.trim(),
-      category: e.category?.trim() || 'Eigene',
-      example: e.example?.trim() || '',
-      source: 'custom',
-      deleted: false,
-      createdAt: now,
-      updatedAt: now,
-      dirty: true,
-      srs: defaultSrs()
-    }));
-    await db.putAll(records);
-    return records;
+    const added = [];
+    const updated = [];
+
+    for (const e of entries) {
+      const target = normalizeEn(e.en);
+      const existing = byEn.get(target);
+      if (existing) {
+        applyUpdate(existing, e);
+        updated.push(existing);
+      } else {
+        const record = {
+          id: makeId(e.en),
+          en: e.en.trim(),
+          de: e.de.trim(),
+          category: e.category?.trim() || 'Eigene',
+          example: e.example?.trim() || '',
+          source: 'custom',
+          deleted: false,
+          createdAt: now,
+          updatedAt: now,
+          dirty: true,
+          srs: defaultSrs()
+        };
+        byEn.set(target, record);
+        added.push(record);
+      }
+    }
+
+    await db.putAll([...added, ...updated]);
+    return { added, updated };
   },
 
   async remove(id) {

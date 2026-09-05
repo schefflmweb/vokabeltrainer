@@ -5,6 +5,7 @@ import { syncService } from '../data/syncService.js';
 
 export function mount(container) {
   let unsubscribeStatus = null;
+  let csvStatusMessage = '';
 
   async function render() {
     const all = await vocabStore.getAll();
@@ -35,7 +36,7 @@ export function mount(container) {
           <input type="file" id="csv-file" accept=".csv,text/csv" />
           <textarea id="csv-text" rows="4" placeholder="cat,Katze&#10;dog,Hund"></textarea>
           <button class="btn btn-secondary" id="csv-import-btn">Importieren</button>
-          <p id="csv-status" class="hint"></p>
+          <p id="csv-status" class="hint">${escapeHtml(csvStatusMessage)}</p>
         </section>
 
         <section>
@@ -83,14 +84,16 @@ export function mount(container) {
     container.querySelector('#csv-import-btn').addEventListener('click', async () => {
       const text = container.querySelector('#csv-text').value;
       const entries = parseCsv(text);
-      const status = container.querySelector('#csv-status');
       if (entries.length === 0) {
-        status.textContent = 'Keine gültigen Zeilen gefunden.';
+        csvStatusMessage = 'Keine gültigen Zeilen gefunden.';
+        container.querySelector('#csv-status').textContent = csvStatusMessage;
         return;
       }
-      await vocabStore.addMany(entries);
+      const { added, updated } = await vocabStore.addMany(entries);
       syncService.sync();
-      status.textContent = `${entries.length} Vokabeln importiert.`;
+      csvStatusMessage = updated.length > 0
+        ? `${added.length} neu hinzugefügt, ${updated.length} bereits vorhandene aktualisiert.`
+        : `${added.length} Vokabeln importiert.`;
       render();
     });
 

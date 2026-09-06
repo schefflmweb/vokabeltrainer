@@ -702,14 +702,16 @@ section.progress-box {
 
 .voice-select,
 .field-select {
-  flex: 1;
   min-width: 0;
   background: var(--bg-elevated-2);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 12px;
   padding: 10px 12px;
-  font-size: 0.95rem;
+  /* Exactly 16px (not the usual rem scale, which lands under 16px here) —
+     iOS Safari auto-zooms the whole page in on any form control whose font
+     size is below 16px when it gets focused/opened. */
+  font-size: 16px;
 }
 
 .voice-select:focus,
@@ -719,7 +721,17 @@ section.progress-box {
   box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.25);
 }
 
+/* .voice-select sits inside a horizontal .voice-row, where flex:1 correctly
+   shares the row with its label/test button. .field-select instead stands
+   alone inside a vertical, centered column (Grammatik's topic picker) —
+   flex:1 there means flex-GROW along that column's main axis, which
+   stretched the dropdown to fill the entire available height. */
+.voice-select {
+  flex: 1;
+}
+
 .field-select {
+  flex: none;
   width: 100%;
 }
 

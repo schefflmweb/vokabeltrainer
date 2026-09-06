@@ -169,7 +169,7 @@ export function mount(container) {
     const placeholder = direction === 'en-de' ? 'Deutsche Übersetzung' : 'Englische Übersetzung';
     container.innerHTML = `
       <div class="quiz-mode">
-        <div class="quiz-content">
+        <div class="quiz-content-compact">
           ${progressBarHtml(index, queue.length)}
           <div class="quiz-word">${escapeHtml(promptText(card))}</div>
         </div>
@@ -180,7 +180,12 @@ export function mount(container) {
       </div>`;
 
     const input = container.querySelector('#typing-input');
-    input.focus();
+    // preventScroll: without it, iOS Safari's own "scroll focused input into
+    // view" heuristic fights with this layout's own flex-based positioning —
+    // it was scrolling the page even though the input/button already sit
+    // correctly on screen, which is exactly the extra scroll being reported.
+    input.focus({ preventScroll: true });
+    container.scrollTo(0, 0); // container === #view, the scrolling ancestor
     container.querySelector('#typing-form').addEventListener('submit', (e) => {
       e.preventDefault();
       if (answered) return;
@@ -196,13 +201,13 @@ export function mount(container) {
     const correctAnswer = answerText(card);
     container.innerHTML = `
       <div class="quiz-mode">
-        <div class="quiz-content">
+        <div class="quiz-content-compact">
           ${progressBarHtml(index, queue.length)}
           <div class="quiz-word">${escapeHtml(promptText(card))}</div>
           <p class="typing-answer ${correct ? 'correct' : 'incorrect'}">${escapeHtml(value) || '–'}</p>
           <p class="hint btn-with-icon"><span class="icon-inline-wrap">${correct ? checkCircleIcon : xCircleIcon}</span> ${correct ? 'Richtig!' : `Richtig wäre: ${escapeHtml(correctAnswer)}`}</p>
+          <button class="btn btn-huge btn-compact btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap">${playIcon}</span></button>
         </div>
-        <button class="btn btn-huge btn-compact btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap">${playIcon}</span></button>
       </div>`;
     container.querySelector('#next-btn').addEventListener('click', next);
   }

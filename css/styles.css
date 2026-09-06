@@ -467,6 +467,16 @@ body {
   gap: 10px;
 }
 
+/* Used by typing mode instead of .quiz-content: no flex-grow, so it (and the
+   input/button right after it) pack near the top of the screen rather than
+   being stretched down to the bottom — keeps the input well clear of where
+   the on-screen keyboard covers, without relying on scroll-into-view. */
+.quiz-content-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .quiz-word {
   font-size: 1.5rem;
   font-weight: 800;

@@ -683,6 +683,20 @@ textarea:focus {
   flex-shrink: 0;
 }
 
+.word-type-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent-text);
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  vertical-align: middle;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 .vocab-row-editing {
   display: flex;
   flex-direction: column;

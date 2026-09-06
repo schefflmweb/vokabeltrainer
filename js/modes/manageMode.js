@@ -10,6 +10,12 @@ function filterVocab(list, query) {
   return list.filter((v) => v.en.toLowerCase().includes(q) || v.de.toLowerCase().includes(q));
 }
 
+const WORTART_OPTIONS = ['Nomen', 'Verb', 'Adjektiv', 'Adverb', 'Präposition', 'Redewendung', 'Pronomen', 'Konjunktion'];
+
+function wortartDatalistHtml() {
+  return `<datalist id="wortart-list">${WORTART_OPTIONS.map((w) => `<option value="${w}"></option>`).join('')}</datalist>`;
+}
+
 function renderEditRowHtml(v) {
   return `
     <form class="vocab-row vocab-row-editing edit-form" data-id="${v.id}">
@@ -17,6 +23,7 @@ function renderEditRowHtml(v) {
       <input type="text" name="de" value="${escapeHtml(v.de)}" placeholder="Deutsch" required />
       <input type="text" name="category" value="${escapeHtml(v.category)}" placeholder="Kategorie" />
       <input type="text" name="example" value="${escapeHtml(v.example || '')}" placeholder="Beispielsatz (optional)" />
+      <input type="text" name="type" value="${escapeHtml(v.type || '')}" placeholder="Wortart (optional)" list="wortart-list" />
       <div class="edit-actions">
         <button type="submit" class="btn btn-icon btn-primary" aria-label="Speichern"><span class="icon-inline-wrap">${checkCircleIcon}</span></button>
         <button type="button" class="btn btn-icon cancel-edit-btn" aria-label="Abbrechen"><span class="icon-inline-wrap">${xCircleIcon}</span></button>
@@ -38,7 +45,7 @@ function renderVocabRowsHtml(list, editingId) {
       <h4>${escapeHtml(cat)}</h4>
       ${byCategory[cat].map((v) => v.id === editingId ? renderEditRowHtml(v) : `
         <div class="vocab-row" data-id="${v.id}">
-          <span>${escapeHtml(v.en)} – ${escapeHtml(v.de)}</span>
+          <span>${escapeHtml(v.en)} – ${escapeHtml(v.de)}${v.type ? ` <span class="word-type-badge">${escapeHtml(v.type)}</span>` : ''}</span>
           <span class="row-actions">
             <button class="btn btn-icon edit-btn" data-id="${v.id}" aria-label="Bearbeiten"><span class="icon-inline-wrap">${editIcon}</span></button>
             <button class="btn btn-icon delete-btn" data-id="${v.id}" aria-label="Löschen"><span class="icon-inline-wrap">${trashIcon}</span></button>
@@ -160,13 +167,15 @@ export function mount(container) {
             <input type="text" name="de" placeholder="Deutsch" required />
             <input type="text" name="category" placeholder="Kategorie (optional)" />
             <input type="text" name="example" placeholder="Beispielsatz (optional)" />
+            <input type="text" name="type" placeholder="Wortart (optional)" list="wortart-list" />
             <button type="submit" class="btn btn-primary">Hinzufügen</button>
           </form>
+          ${wortartDatalistHtml()}
         </section>
 
         <section>
           <h3>CSV-Import &amp; Export</h3>
-          <p class="hint">Spalten: Englisch, Deutsch, Kategorie (optional), Beispiel (optional)</p>
+          <p class="hint">Spalten: Englisch, Deutsch, Kategorie (optional), Beispiel (optional), Wortart (optional)</p>
           <input type="file" id="csv-file" accept=".csv,text/csv" />
           <textarea id="csv-text" rows="4" placeholder="cat,Katze&#10;dog,Hund"></textarea>
           <button class="btn btn-secondary" id="csv-import-btn">Importieren</button>

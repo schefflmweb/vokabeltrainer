@@ -27,11 +27,12 @@ async function touchStreak() {
   await db.setMeta('streakCount', lastDate === yesterday ? count + 1 : 1);
 }
 
-/** Refreshes translation/category/example on an existing record without touching its learning progress. */
-function applyUpdate(record, { de, category, example }) {
+/** Refreshes translation/category/example/type on an existing record without touching its learning progress. */
+function applyUpdate(record, { de, category, example, type }) {
   record.de = de.trim();
   if (category?.trim()) record.category = category.trim();
   if (example?.trim()) record.example = example.trim();
+  if (type?.trim()) record.type = type.trim();
   record.updatedAt = Date.now();
   record.dirty = true;
   return record;
@@ -59,12 +60,12 @@ export const vocabStore = {
   },
 
   /** Adds a vocab entry, or updates the existing one (by English word, case-insensitive) if it already exists — never creates a duplicate. Learning progress on an updated entry is preserved. */
-  async add({ en, de, category, example }) {
+  async add({ en, de, category, example, type }) {
     const all = await db.getAll();
     const target = normalizeEn(en);
     const existing = all.find((v) => !v.deleted && normalizeEn(v.en) === target);
     if (existing) {
-      applyUpdate(existing, { de, category, example });
+      applyUpdate(existing, { de, category, example, type });
       await db.put(existing);
       return existing;
     }
@@ -76,6 +77,7 @@ export const vocabStore = {
       de: de.trim(),
       category: category?.trim() || 'Eigene',
       example: example?.trim() || '',
+      type: type?.trim() || '',
       source: 'custom',
       deleted: false,
       createdAt: now,
@@ -108,6 +110,7 @@ export const vocabStore = {
           de: e.de.trim(),
           category: e.category?.trim() || 'Eigene',
           example: e.example?.trim() || '',
+          type: e.type?.trim() || '',
           source: 'custom',
           deleted: false,
           createdAt: now,
@@ -125,13 +128,14 @@ export const vocabStore = {
   },
 
   /** Directly overwrites an existing entry's fields by id — used for manual edits (a targeted single-record change, unlike add()'s collision-avoiding upsert). Learning progress is untouched. */
-  async update(id, { en, de, category, example }) {
+  async update(id, { en, de, category, example, type }) {
     const record = await db.get(id);
     if (!record) return null;
     record.en = en.trim();
     record.de = de.trim();
     record.category = category?.trim() || 'Eigene';
     record.example = example?.trim() || '';
+    record.type = type?.trim() || '';
     record.updatedAt = Date.now();
     record.dirty = true;
     await db.put(record);

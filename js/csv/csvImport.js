@@ -66,7 +66,7 @@ function parseLine(line, delimiter) {
 }
 
 /**
- * Parses CSV/semicolon-separated text with columns: en, de, category?, example?
+ * Parses CSV/semicolon-separated text with columns: en, de, category?, example?, type?
  * A header row (first cell literally "en") is detected and skipped.
  */
 export function parseCsv(text) {
@@ -89,7 +89,8 @@ export function parseCsv(text) {
       en: cols[0],
       de: cols[1],
       category: cols[2] || '',
-      example: cols[3] || ''
+      example: cols[3] || '',
+      type: cols[4] || ''
     });
   }
   return entries;
@@ -101,9 +102,9 @@ export function toCsv(list) {
     const str = String(value ?? '');
     return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
   };
-  const lines = ['en,de,category,example'];
+  const lines = ['en,de,category,example,type'];
   for (const v of list) {
-    lines.push([v.en, v.de, v.category, v.example].map(escapeField).join(','));
+    lines.push([v.en, v.de, v.category, v.example, v.type].map(escapeField).join(','));
   }
   return lines.join('\r\n');
 }

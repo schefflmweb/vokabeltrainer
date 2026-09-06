@@ -209,8 +209,9 @@ body {
    (unlike Auto mode's rate buttons, meant to be hit without looking). */
 .btn-huge.btn-compact {
   min-height: auto;
-  padding: 18px 20px;
-  font-size: 1.3rem;
+  padding: 12px 20px;
+  font-size: 1.1rem;
+  flex-shrink: 0;
 }
 
 .btn-icon {
@@ -269,7 +270,11 @@ body {
   text-align: center;
   color: var(--text-muted);
   font-size: 0.8rem;
-  margin-top: 6px;
+  margin-top: 4px;
+}
+
+.quiz-mode .hint {
+  font-size: 0.85rem;
 }
 
 /* --- Direction / mode toggles (shared) --- */
@@ -441,10 +446,10 @@ body {
 
 .quiz-mode {
   height: 100%;
-  padding: 16px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 /* Wraps the word/options/feedback in active-question states so the action
@@ -459,28 +464,28 @@ body {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 .quiz-word {
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 800;
   text-align: center;
-  padding: 24px;
+  padding: 14px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 22px;
+  border-radius: 18px;
   box-shadow: var(--shadow-sm);
 }
 
 .quiz-options {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .btn-option {
-  padding: 16px;
-  font-size: 1.1rem;
+  padding: 12px 14px;
+  font-size: 1rem;
   text-align: left;
 }
 
@@ -505,7 +510,8 @@ body {
 .typing-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .typing-form input {
@@ -513,8 +519,8 @@ body {
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 14px;
-  padding: 14px 16px;
-  font-size: 1.3rem;
+  padding: 12px 16px;
+  font-size: 1.15rem;
   text-align: center;
   width: 100%;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -528,9 +534,9 @@ body {
 
 .typing-answer {
   text-align: center;
-  font-size: 1.3rem;
+  font-size: 1.15rem;
   font-weight: 700;
-  padding: 14px;
+  padding: 10px;
   border-radius: 16px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);

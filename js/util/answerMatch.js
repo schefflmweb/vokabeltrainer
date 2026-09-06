@@ -5,14 +5,18 @@
  * one of them (or the whole field verbatim), not only the literal full text.
  */
 
-function normalize(str) {
+export function normalize(str) {
   return str.trim().toLowerCase().replace(/[.,!?;:]+$/g, '');
+}
+
+/** The full field plus each individual "/"- or ","-separated synonym, normalized and de-duplicated. */
+export function getAlternatives(expected) {
+  const whole = normalize(expected);
+  const parts = expected.split(/[/,]/).map(normalize).filter(Boolean);
+  return [...new Set([whole, ...parts])];
 }
 
 export function answersMatch(userAnswer, expected) {
   if (!userAnswer || !expected) return false;
-  const given = normalize(userAnswer);
-  if (given === normalize(expected)) return true;
-  const alternatives = expected.split(/[/,]/).map(normalize).filter(Boolean);
-  return alternatives.includes(given);
+  return getAlternatives(expected).includes(normalize(userAnswer));
 }

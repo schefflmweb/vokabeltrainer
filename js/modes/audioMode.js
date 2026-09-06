@@ -177,21 +177,22 @@ export function mount(container) {
     activeListen = speechInputService.listen({
       lang: answerLang() === 'de' ? 'de-DE' : 'en-US',
       timeoutMs: LISTEN_TIMEOUT_MS,
-      onResult: (transcript) => handleVoiceResult(card, transcript),
-      onTimeout: () => handleVoiceResult(card, ''),
+      onResult: (transcripts) => handleVoiceResult(card, transcripts),
+      onTimeout: () => handleVoiceResult(card, []),
       onError: (err) => handleVoiceError(card, err)
     });
   }
 
-  function handleVoiceResult(card, transcript) {
+  /** transcripts: array of recognition candidates, best-first (see speechInputService.listen). */
+  function handleVoiceResult(card, transcripts) {
     if (currentCard() !== card) return;
     activeListen = null;
     const expected = secondaryText(card);
-    const correct = speechInputService.answersMatch(transcript, expected);
+    const correct = speechInputService.answersMatchAny(transcripts, expected);
     stats[correct ? 'known' : 'unknown'] += 1;
     vocabStore.markReviewed(card.id, correct);
     syncService.sync();
-    voiceResult = { transcript, correct, expected };
+    voiceResult = { transcript: transcripts?.[0] || '', correct, expected };
     voiceState = 'result';
     render();
 
@@ -236,7 +237,7 @@ export function mount(container) {
     if (card) {
       activeListen?.stop();
       activeListen = null;
-      handleVoiceResult(card, '');
+      handleVoiceResult(card, []);
     }
   }
 

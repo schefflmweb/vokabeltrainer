@@ -6,19 +6,18 @@
  * rather than silently failing.
  */
 
-const RecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+import { answersMatch } from '../util/answerMatch.js';
 
-function normalize(str) {
-  return str.trim().toLowerCase().replace(/[.,!?;:]+$/g, '');
-}
+const RecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 export const speechInputService = {
   isSupported() {
     return !!RecognitionCtor;
   },
 
+  /** Accepts a match against any one of several synonyms listed in `expected` — see util/answerMatch.js. */
   answersMatch(transcript, expected) {
-    return !!transcript && normalize(transcript) === normalize(expected);
+    return answersMatch(transcript, expected);
   },
 
   /** One-shot mic permission request, meant to be called directly from a tap so any OS prompt is allowed to appear. */

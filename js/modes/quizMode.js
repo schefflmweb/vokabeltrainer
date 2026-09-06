@@ -3,15 +3,12 @@ import { syncService } from '../data/syncService.js';
 import { progressBarHtml } from '../ui/progressBar.js';
 import { flagGB, flagDE } from '../ui/flags.js';
 import { checklistIcon, keyboardIcon, starIcon, refreshIcon, checkCircleIcon, xCircleIcon, playIcon } from '../ui/icons.js';
+import { answersMatch } from '../util/answerMatch.js';
 
 const SESSION_SIZE = 15;
 
 function shuffle(arr) {
   return [...arr].sort(() => Math.random() - 0.5);
-}
-
-function normalizeAnswer(str) {
-  return str.trim().toLowerCase();
 }
 
 export function mount(container) {
@@ -183,7 +180,7 @@ export function mount(container) {
       if (answered) return;
       answered = true;
       const value = input.value;
-      const correct = normalizeAnswer(value) === normalizeAnswer(answerText(card));
+      const correct = answersMatch(value, answerText(card));
       registerAnswer(correct, card);
       renderTypingAnswered(card, value, correct);
     });

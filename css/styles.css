@@ -214,6 +214,27 @@ body {
   flex-shrink: 0;
 }
 
+/* Mode-choice buttons on Quiz's start screen (Multiple Choice / Eintippen):
+   much smaller than the driving-mode .btn-huge default (which they'd
+   otherwise inherit) so both fit on one iPhone screen together with the
+   direction toggle above them, with no scrolling needed. */
+.quiz-choice-btn {
+  min-height: auto;
+  padding: 14px 18px;
+  font-size: 1.15rem;
+}
+
+.quiz-choice-btn .icon-inline-wrap.icon-lg {
+  width: 24px;
+  height: 24px;
+  vertical-align: -7px;
+}
+
+.quiz-choice-btn .hint {
+  font-size: 0.78rem;
+  margin-top: 3px;
+}
+
 .btn-icon {
   background: none;
   border: none;

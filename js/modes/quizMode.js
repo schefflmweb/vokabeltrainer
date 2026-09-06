@@ -89,11 +89,11 @@ export function mount(container) {
         </div>
 
         <p class="hint">Wie möchtest du üben?</p>
-        <button class="btn btn-huge btn-primary btn-with-icon" id="start-choice">
+        <button class="btn btn-huge quiz-choice-btn btn-primary btn-with-icon" id="start-choice">
           <span class="icon-inline-wrap icon-lg">${checklistIcon}</span>
           <span>Multiple Choice<span class="hint">Antwort antippen</span></span>
         </button>
-        <button class="btn btn-huge btn-secondary btn-with-icon" id="start-typing">
+        <button class="btn btn-huge quiz-choice-btn btn-secondary btn-with-icon" id="start-typing">
           <span class="icon-inline-wrap icon-lg">${keyboardIcon}</span>
           <span>Eintippen<span class="hint">Übersetzung selbst schreiben</span></span>
         </button>

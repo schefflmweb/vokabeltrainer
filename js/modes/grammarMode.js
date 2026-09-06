@@ -16,6 +16,7 @@ export function mount(container) {
   let topics = [];
   let selectedTopic = '';
   let answered = false;
+  let displayOrder = []; // indices into currentItem().options, shuffled once per question
 
   function currentItem() {
     return index >= 0 && index < queue.length ? queue[index] : null;
@@ -86,7 +87,10 @@ export function mount(container) {
 
   function renderQuestion() {
     const item = currentItem();
-    const options = item.options;
+    // Shuffled once per question — CSV/starter data typically lists the
+    // correct option in a fixed spot (often first), which would otherwise
+    // make the answer guessable by position alone.
+    displayOrder = shuffle(item.options.map((_, i) => i));
     container.innerHTML = `
       <div class="quiz-mode">
         <div class="quiz-content">
@@ -94,7 +98,7 @@ export function mount(container) {
           <p class="hint">${escapeHtml(item.topic)}</p>
           <div class="quiz-word grammar-sentence">${escapeHtml(item.question)}</div>
           <div class="quiz-options">
-            ${options.map((opt, i) => `<button class="btn btn-option" data-opt="${i}">${escapeHtml(opt)}</button>`).join('')}
+            ${displayOrder.map((optIndex, i) => `<button class="btn btn-option" data-opt="${i}">${escapeHtml(item.options[optIndex])}</button>`).join('')}
           </div>
         </div>
       </div>`;
@@ -103,9 +107,10 @@ export function mount(container) {
       btn.addEventListener('click', () => {
         if (answered) return;
         answered = true;
-        const correct = i === item.correctIndex;
+        const originalIndex = displayOrder[i];
+        const correct = originalIndex === item.correctIndex;
         registerAnswer(correct, item);
-        renderAnswered(item, i, correct);
+        renderAnswered(item, originalIndex, correct);
       });
     });
   }
@@ -118,11 +123,11 @@ export function mount(container) {
           <p class="hint">${escapeHtml(item.topic)}</p>
           <div class="quiz-word grammar-sentence">${escapeHtml(item.question)}</div>
           <div class="quiz-options">
-            ${item.options.map((opt, i) => {
+            ${displayOrder.map((optIndex) => {
               let cls = 'btn btn-option disabled';
-              if (i === item.correctIndex) cls += ' correct';
-              else if (i === selectedIndex) cls += ' incorrect';
-              return `<button class="${cls}" disabled>${escapeHtml(opt)}</button>`;
+              if (optIndex === item.correctIndex) cls += ' correct';
+              else if (optIndex === selectedIndex) cls += ' incorrect';
+              return `<button class="${cls}" disabled>${escapeHtml(item.options[optIndex])}</button>`;
             }).join('')}
           </div>
           <p class="hint typing-result btn-with-icon"><span class="icon-inline-wrap">${correct ? checkCircleIcon : xCircleIcon}</span> ${correct ? 'Richtig!' : `Richtig wäre: ${escapeHtml(item.options[item.correctIndex])}`}</p>

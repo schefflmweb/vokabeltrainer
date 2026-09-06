@@ -27,6 +27,10 @@
 
 html, body {
   height: 100%;
+  /* iOS Safari's address/tab bars can shrink the actually-visible area below
+     what a plain 100% (≈100vh) assumes; dvh tracks the real visible height.
+     Browsers that don't understand it ignore this line and keep 100% above. */
+  height: 100dvh;
   margin: 0;
 }
 
@@ -436,7 +440,23 @@ body {
 /* --- Quiz mode --- */
 
 .quiz-mode {
+  height: 100%;
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Wraps the word/options/feedback in active-question states so the action
+   button below it (Weiter/Prüfen) is a fixed-size flex item that always
+   stays within the visible screen — content that doesn't fit scrolls inside
+   this wrapper instead of pushing the button off-screen. Real mobile Safari
+   also shrinks the visible viewport further with its address/tab bars than
+   a plain 100vh assumes, which plain content-flow sizing doesn't account for. */
+.quiz-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;

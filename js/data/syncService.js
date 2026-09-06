@@ -1,8 +1,15 @@
 import { authService } from '../auth/authService.js';
 import { vocabStore } from './vocabStore.js';
+import { grammarStore } from './grammarStore.js';
 import { db } from './db.js';
 
-const GRAPH_FILE_URL = 'https://graph.microsoft.com/v1.0/me/drive/special/approot:/vocab-data.json:/content';
+const GRAPH_BASE = 'https://graph.microsoft.com/v1.0/me/drive/special/approot:/';
+
+/** Each collection gets its own file in the OneDrive app folder, synced independently but as part of the same sync() pass. */
+const COLLECTIONS = [
+  { store: vocabStore, fileName: 'vocab-data.json', field: 'vocab' },
+  { store: grammarStore, fileName: 'grammar-data.json', field: 'grammar' }
+];
 
 let listeners = [];
 let status = { state: 'offline', message: 'Nur lokal gespeichert', lastSync: null };
@@ -12,29 +19,46 @@ function setStatus(next) {
   listeners.forEach((fn) => fn(status));
 }
 
-async function fetchRemote(token) {
-  const res = await fetch(GRAPH_FILE_URL, {
+async function fetchRemote(token, fileName, field) {
+  const res = await fetch(`${GRAPH_BASE}${fileName}:/content`, {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (res.status === 404) return { records: null, etag: null };
   if (!res.ok) throw new Error(`OneDrive-Abruf fehlgeschlagen (${res.status})`);
   const etag = res.headers.get('ETag');
   const body = await res.json();
-  return { records: body.vocab || [], etag };
+  return { records: body[field] || [], etag };
 }
 
-async function pushRemote(token, records, etag) {
+async function pushRemote(token, fileName, field, records, etag) {
   const headers = {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json'
   };
   if (etag) headers['If-Match'] = etag;
-  const res = await fetch(GRAPH_FILE_URL, {
+  const res = await fetch(`${GRAPH_BASE}${fileName}:/content`, {
     method: 'PUT',
     headers,
-    body: JSON.stringify({ vocab: records, savedAt: new Date().toISOString() })
+    body: JSON.stringify({ [field]: records, savedAt: new Date().toISOString() })
   });
   return res;
+}
+
+/** Pull → merge → push for one collection, with a single retry if someone else wrote in the meantime (412). */
+async function syncCollection(token, { store, fileName, field }) {
+  let { records: remoteRecords, etag } = await fetchRemote(token, fileName, field);
+  const merged = await store.mergeFromRemote(remoteRecords);
+
+  let res = await pushRemote(token, fileName, field, merged, etag);
+  if (res.status === 412) {
+    const retryRemote = await fetchRemote(token, fileName, field);
+    const remerged = await store.mergeFromRemote(retryRemote.records);
+    res = await pushRemote(token, fileName, field, remerged, retryRemote.etag);
+  }
+  if (!res.ok) throw new Error(`OneDrive-Speichern fehlgeschlagen (${res.status})`);
+
+  const dirty = await store.getDirty();
+  await store.clearDirty(dirty.map((d) => d.id));
 }
 
 export const syncService = {
@@ -63,22 +87,10 @@ export const syncService = {
 
     setStatus({ state: 'syncing', message: 'Synchronisiere …' });
     try {
-      let { records: remoteRecords, etag } = await fetchRemote(token);
-      const merged = await vocabStore.mergeFromRemote(remoteRecords);
-
-      let res = await pushRemote(token, merged, etag);
-      if (res.status === 412) {
-        // Someone else wrote in the meantime — re-pull, re-merge, retry once.
-        const retryRemote = await fetchRemote(token);
-        const remerged = await vocabStore.mergeFromRemote(retryRemote.records);
-        res = await pushRemote(token, remerged, retryRemote.etag);
+      for (const collection of COLLECTIONS) {
+        await syncCollection(token, collection);
       }
-      if (!res.ok) throw new Error(`OneDrive-Speichern fehlgeschlagen (${res.status})`);
-
-      const dirty = await vocabStore.getDirty();
-      await vocabStore.clearDirty(dirty.map((d) => d.id));
       await db.setMeta('lastSync', Date.now());
-
       setStatus({ state: 'synced', message: 'Synchronisiert', lastSync: Date.now() });
     } catch (err) {
       setStatus({ state: 'error', message: err.message || 'Sync-Fehler – arbeitet lokal weiter' });

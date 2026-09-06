@@ -1,4 +1,5 @@
 import { grammarStore } from '../data/grammarStore.js';
+import { syncService } from '../data/syncService.js';
 import { progressBarHtml } from '../ui/progressBar.js';
 import { bookIcon, refreshIcon, starIcon, checkCircleIcon, xCircleIcon, playIcon } from '../ui/icons.js';
 
@@ -39,6 +40,7 @@ export function mount(container) {
   function registerAnswer(correct, item) {
     stats[correct ? 'known' : 'unknown'] += 1;
     grammarStore.markReviewed(item.id, correct);
+    syncService.sync();
   }
 
   function next() {

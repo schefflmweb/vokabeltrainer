@@ -20,7 +20,17 @@ function normalizeQuestion(question) {
  * again, so the next launch silently re-seeded it, and — worse — synced
  * that fresh copy could outrace a genuine delete-tombstone from another
  * device and resurrect words the user had deliberately removed. A one-time
- * flag means deleting the starter grammar set (or all of it) sticks.
+ * flag means deleting the starter grammar set (or all of it) sticks on the
+ * device it happened on — but with multiple devices, seeding a SECOND or
+ * THIRD device still risks a variant of the same bug: that device seeds its
+ * own fresh local copy (with today's timestamp) before it has ever synced,
+ * so if it then pulls a delete-tombstone (or reviewed progress) for the
+ * same starter item from another device, mergeFromRemote's last-write-wins
+ * would wrongly prefer the fresh-but-stale local seed over the genuinely
+ * newer remote state. Stamping seeded records with updatedAt: 0 (instead of
+ * "now") closes that gap: a first-ever device still keeps its seed (nothing
+ * to compare against remotely), but any later device always defers to
+ * whatever real remote history already exists for that item.
  */
 async function seedIfNeeded() {
   const already = await db.getMeta('grammarSeeded');
@@ -35,7 +45,7 @@ async function seedIfNeeded() {
     source: 'starter',
     deleted: false,
     createdAt: now,
-    updatedAt: now,
+    updatedAt: 0,
     dirty: false,
     srs: defaultSrs()
   }));

@@ -69,6 +69,7 @@ export function mount(container) {
   let vocabCache = [];
   let grammarCount = 0;
   let editingId = null;
+  let lastSyncState = null;
 
   function bindRowActions(scopeEl) {
     scopeEl.querySelectorAll('.delete-btn').forEach((btn) => {
@@ -108,10 +109,11 @@ export function mount(container) {
 
   /** Re-renders only the list + count, leaving the search input itself untouched so it never loses focus while typing. */
   function updateVocabListOnly() {
+    const listEl = container.querySelector('#vocab-list-container');
+    if (!listEl) return; // Verwalten isn't the visible screen anymore (e.g. a sync callback resolving after navigating away) — nothing to update.
     const input = container.querySelector('#vocab-search');
     searchQuery = input ? input.value : searchQuery;
     const filtered = filterVocab(vocabCache, searchQuery);
-    const listEl = container.querySelector('#vocab-list-container');
     listEl.innerHTML = renderVocabRowsHtml(filtered, editingId);
     bindRowActions(listEl);
     const countEl = container.querySelector('#vocab-count');
@@ -144,6 +146,34 @@ export function mount(container) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Re-reads counts/lists after a sync pulls in changes from another device
+   * (a CSV imported there, progress reviewed there, ...) — without a full
+   * render(), which would disrupt an in-progress edit or search. Updates
+   * only the DOM bits that show counts, same spirit as updateVocabListOnly().
+   */
+  async function refreshAfterSync() {
+    if (!container.querySelector('.manage-mode')) return; // Verwalten isn't the visible screen anymore.
+
+    vocabCache = await vocabStore.getAll();
+    updateVocabListOnly();
+
+    const grammarAll = await grammarStore.getAll();
+    grammarCount = grammarAll.length;
+    const grammarCountEl = container.querySelector('#grammar-count');
+    if (grammarCountEl) grammarCountEl.textContent = grammarCount;
+
+    const now = Date.now();
+    const dueToday = vocabCache.filter((v) => v.srs.dueDate <= now).length;
+    const learned = vocabCache.filter((v) => v.srs.repetitions >= 2).length;
+    const streak = await vocabStore.getStreak();
+    const statTiles = container.querySelectorAll('.stat-value');
+    if (statTiles[0]) statTiles[0].textContent = vocabCache.length;
+    if (statTiles[1]) statTiles[1].textContent = dueToday;
+    if (statTiles[2]) statTiles[2].textContent = learned;
+    if (statTiles[3]) statTiles[3].innerHTML = `<span class="icon-inline-wrap">${flameIcon}</span> ${streak.count}`;
   }
 
   async function render() {
@@ -224,7 +254,7 @@ export function mount(container) {
         </section>
 
         <section>
-          <h3><span class="icon-inline-wrap">${bookIcon}</span> Grammatik (${grammarCount})</h3>
+          <h3><span class="icon-inline-wrap">${bookIcon}</span> Grammatik (<span id="grammar-count">${grammarCount}</span>)</h3>
           <p class="hint">Eigene Übungen per CSV importieren, zusätzlich zum eingebauten Grundstock. Spalten: Thema, Frage (___ für die Lücke), Option1, Option2, Option3, Option4, Richtig (1-4), Erklärung (optional)</p>
           <input type="file" id="grammar-csv-file" accept=".csv,text/csv" />
           <textarea id="grammar-csv-text" rows="4" placeholder="Präpositionen,I was born ___ 1995.,in,on,at,since,1,Jahre: in"></textarea>
@@ -297,6 +327,7 @@ export function mount(container) {
         return;
       }
       const { added, updated } = await grammarStore.addMany(entries);
+      syncService.sync();
       grammarCsvStatusMessage = updated.length > 0
         ? `${added.length} neu hinzugefügt, ${updated.length} bereits vorhandene aktualisiert.`
         : `${added.length} Übungen importiert.`;
@@ -308,6 +339,7 @@ export function mount(container) {
     container.querySelector('#grammar-delete-all-btn').addEventListener('click', async () => {
       if (!confirm(`Wirklich alle ${grammarCount} Grammatikübungen (inkl. Fortschritt) unwiderruflich löschen?`)) return;
       await grammarStore.removeAll();
+      syncService.sync();
       render();
     });
 
@@ -394,9 +426,23 @@ export function mount(container) {
 
   render();
 
+  // Own, permanent subscription (unlike renderAccountBox's, which is torn
+  // down/recreated on every render) so a sync completing anywhere — on
+  // startup, in the background, or triggered from another mode — refreshes
+  // the counts shown here even while this screen stays open. Edge-triggered
+  // on the transition *into* 'synced' so it doesn't re-fire on every repeat
+  // status ping.
+  const unsubscribeAutoRefresh = syncService.onStatusChange((status) => {
+    if (status.state === 'synced' && lastSyncState !== 'synced') {
+      refreshAfterSync();
+    }
+    lastSyncState = status.state;
+  });
+
   return () => {
     unsubscribeStatus?.();
     unsubscribeVoices?.();
+    unsubscribeAutoRefresh?.();
   };
 }
 

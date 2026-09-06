@@ -671,6 +671,43 @@ section.progress-box {
   margin-top: 8px;
 }
 
+.voice-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.voice-row-label {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 64px;
+}
+
+.voice-select {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+
+.voice-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.25);
+}
+
+.voice-row .btn-icon {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
 .add-form {
   display: flex;
   flex-direction: column;

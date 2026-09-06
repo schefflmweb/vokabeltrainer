@@ -8,13 +8,17 @@
 
 let voicesCache = [];
 let voicesPollStarted = false;
+let voiceListeners = [];
 
 function pollVoicesUntilReady() {
   if (voicesPollStarted) return;
   voicesPollStarted = true;
   const check = () => {
     const v = speechSynthesis.getVoices();
-    if (v && v.length) voicesCache = v;
+    if (v && v.length && v.length !== voicesCache.length) {
+      voicesCache = v;
+      voiceListeners.forEach((fn) => fn(voicesCache));
+    }
   };
   check();
   // onvoiceschanged is unreliable on iOS Safari, so poll for a while as a backup.
@@ -29,9 +33,31 @@ function pollVoicesUntilReady() {
 
 pollVoicesUntilReady();
 
+const VOICE_PREF_KEY_PREFIX = 'vocab-voice-';
+
+function getPreferredVoiceName(langPrefix) {
+  try { return localStorage.getItem(VOICE_PREF_KEY_PREFIX + langPrefix) || ''; } catch { return ''; }
+}
+
+function setPreferredVoiceName(langPrefix, name) {
+  try {
+    if (name) localStorage.setItem(VOICE_PREF_KEY_PREFIX + langPrefix, name);
+    else localStorage.removeItem(VOICE_PREF_KEY_PREFIX + langPrefix);
+  } catch {
+    // Falls back to the default voice for this session only.
+  }
+}
+
+function voicesFor(langPrefix) {
+  return voicesCache.filter((v) => v.lang?.toLowerCase().startsWith(langPrefix));
+}
+
 function pickVoice(langPrefix) {
-  const match = voicesCache.find((v) => v.lang?.toLowerCase().startsWith(langPrefix));
-  return match || null;
+  const candidates = voicesFor(langPrefix);
+  if (candidates.length === 0) return null;
+  const preferredName = getPreferredVoiceName(langPrefix);
+  const preferred = preferredName && candidates.find((v) => v.name === preferredName);
+  return preferred || candidates[0];
 }
 
 function speakOne(text, langPrefix, rate) {
@@ -117,5 +143,40 @@ export const ttsService = {
 
   isSupported() {
     return typeof window !== 'undefined' && 'speechSynthesis' in window;
+  },
+
+  /** All voices the device offers for a language ('en' or 'de'), for a voice picker. */
+  listVoices(langPrefix) {
+    return voicesFor(langPrefix);
+  },
+
+  getPreferredVoiceName,
+  setPreferredVoiceName,
+
+  /**
+   * Called whenever the device's voice list changes after this point (e.g.
+   * arrives asynchronously post-render — see module doc). Does NOT fire
+   * immediately for voices already cached; callers should read
+   * listVoices()/getPreferredVoiceName() directly for the current state and
+   * use this only to react to later changes (a caller that re-subscribes on
+   * every render, like a voice picker re-rendering itself, would otherwise
+   * recurse forever on an immediate synchronous replay).
+   */
+  onVoicesChange(fn) {
+    voiceListeners.push(fn);
+    return () => {
+      voiceListeners = voiceListeners.filter((l) => l !== fn);
+    };
+  },
+
+  /** Speaks a short sample with a specific voice, for previewing in the voice picker — must be called directly from a click (see module doc). */
+  previewVoice(langPrefix, voiceName, sampleText) {
+    speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(sampleText);
+    utterance.lang = langPrefix === 'en' ? 'en-US' : 'de-DE';
+    utterance.rate = 0.95;
+    const voice = voicesCache.find((v) => v.name === voiceName);
+    utterance.voice = voice || pickVoice(langPrefix);
+    speechSynthesis.speak(utterance);
   }
 };

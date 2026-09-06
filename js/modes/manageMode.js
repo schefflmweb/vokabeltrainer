@@ -2,7 +2,10 @@ import { vocabStore } from '../data/vocabStore.js';
 import { parseCsv, toCsv } from '../csv/csvImport.js';
 import { authService } from '../auth/authService.js';
 import { syncService } from '../data/syncService.js';
-import { trashIcon, searchIcon, editIcon, checkCircleIcon, xCircleIcon, downloadIcon, chartIcon, flameIcon } from '../ui/icons.js';
+import { ttsService } from '../tts/ttsService.js';
+import { trashIcon, searchIcon, editIcon, checkCircleIcon, xCircleIcon, downloadIcon, chartIcon, flameIcon, speakerIcon } from '../ui/icons.js';
+
+const VOICE_SAMPLES = { en: 'This is what I sound like.', de: 'So höre ich mich an.' };
 
 function filterVocab(list, query) {
   const q = query.trim().toLowerCase();
@@ -58,6 +61,7 @@ function renderVocabRowsHtml(list, editingId) {
 
 export function mount(container) {
   let unsubscribeStatus = null;
+  let unsubscribeVoices = null;
   let csvStatusMessage = '';
   let searchQuery = '';
   let vocabCache = [];
@@ -160,6 +164,8 @@ export function mount(container) {
 
         <section class="account-box" id="account-box"></section>
 
+        <section class="voice-box" id="voice-box"></section>
+
         <section>
           <h3>Neue Vokabel</h3>
           <form id="add-form" class="add-form">
@@ -247,6 +253,7 @@ export function mount(container) {
     });
 
     renderAccountBox();
+    renderVoiceBox();
   }
 
   function renderAccountBox() {
@@ -281,10 +288,56 @@ export function mount(container) {
     });
   }
 
+  function renderVoiceBox() {
+    const box = container.querySelector('#voice-box');
+    if (!box) return;
+
+    if (!ttsService.isSupported()) {
+      box.innerHTML = `
+        <h3><span class="icon-inline-wrap">${speakerIcon}</span> Vorlese-Stimme</h3>
+        <p class="hint">Sprachausgabe wird auf diesem Gerät nicht unterstützt.</p>`;
+      return;
+    }
+
+    const voiceOptionsHtml = (langPrefix) => {
+      const voices = ttsService.listVoices(langPrefix);
+      if (voices.length === 0) return `<option value="">Wird geladen …</option>`;
+      const preferred = ttsService.getPreferredVoiceName(langPrefix);
+      const selectedName = preferred && voices.some((v) => v.name === preferred) ? preferred : voices[0].name;
+      return voices.map((v) => `<option value="${escapeHtml(v.name)}" ${v.name === selectedName ? 'selected' : ''}>${escapeHtml(v.name)} (${escapeHtml(v.lang)})</option>`).join('');
+    };
+
+    box.innerHTML = `
+      <h3><span class="icon-inline-wrap">${speakerIcon}</span> Vorlese-Stimme</h3>
+      <p class="hint">Gilt fürs Vorlesen im Auto-Modus, falls dein Gerät mehrere Stimmen anbietet.</p>
+      <div class="voice-row">
+        <span class="voice-row-label">Englisch</span>
+        <select class="voice-select" id="voice-select-en">${voiceOptionsHtml('en')}</select>
+        <button type="button" class="btn btn-icon" id="voice-test-en" aria-label="Englische Stimme anhören"><span class="icon-inline-wrap">${speakerIcon}</span></button>
+      </div>
+      <div class="voice-row">
+        <span class="voice-row-label">Deutsch</span>
+        <select class="voice-select" id="voice-select-de">${voiceOptionsHtml('de')}</select>
+        <button type="button" class="btn btn-icon" id="voice-test-de" aria-label="Deutsche Stimme anhören"><span class="icon-inline-wrap">${speakerIcon}</span></button>
+      </div>`;
+
+    ['en', 'de'].forEach((langPrefix) => {
+      const select = box.querySelector(`#voice-select-${langPrefix}`);
+      select.addEventListener('change', () => ttsService.setPreferredVoiceName(langPrefix, select.value));
+      box.querySelector(`#voice-test-${langPrefix}`).addEventListener('click', () => {
+        ttsService.previewVoice(langPrefix, select.value, VOICE_SAMPLES[langPrefix]);
+      });
+    });
+
+    unsubscribeVoices?.();
+    unsubscribeVoices = ttsService.onVoicesChange(() => renderVoiceBox());
+  }
+
   render();
 
   return () => {
     unsubscribeStatus?.();
+    unsubscribeVoices?.();
   };
 }
 

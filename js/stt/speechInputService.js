@@ -6,41 +6,10 @@
  * rather than silently failing.
  */
 
-import { answersMatch, getAlternatives, normalize } from '../util/answerMatch.js';
+import { answersMatch, getAlternatives, normalize, fuzzyMatchesAny } from '../util/answerMatch.js';
 
 const RecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
 const MAX_ALTERNATIVES = 5;
-
-function levenshtein(a, b) {
-  const m = a.length;
-  const n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  const dp = new Array(n + 1);
-  for (let j = 0; j <= n; j++) dp[j] = j;
-  for (let i = 1; i <= m; i++) {
-    let prev = dp[0];
-    dp[0] = i;
-    for (let j = 1; j <= n; j++) {
-      const temp = dp[j];
-      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
-      prev = temp;
-    }
-  }
-  return dp[n];
-}
-
-/**
- * No tolerance at all for short words: German has plenty of minimal pairs a
- * single edit apart (Haus/Maus, Bein/Wein, ...), so being lenient there risks
- * accepting a genuinely wrong but similar-sounding word. Fuzziness only kicks
- * in for longer words/phrases, where a stray extra letter or substitution is
- * much more likely to be real STT noise than a flip to a different real word.
- */
-function fuzzyThreshold(word) {
-  if (word.length <= 6) return 0;
-  return word.length <= 10 ? 1 : 2;
-}
 
 export const speechInputService = {
   isSupported() {
@@ -56,9 +25,10 @@ export const speechInputService = {
    * Checks every recognition candidate (best-first, from maxAlternatives —
    * speech engines frequently rank the correct word 2nd or 3rd) against
    * every synonym in `expected`. Tries exact matches first; only if none of
-   * those hit does it fall back to a small edit-distance tolerance, since
-   * mishearing a letter or two is a common, expected kind of STT noise —
-   * distinct from Quiz's typed answers, where exact spelling still matters.
+   * those hit does it fall back to the same small edit-distance tolerance
+   * used for typed answers (see util/answerMatch.js) — checked across every
+   * candidate transcript, since mishearing a letter or two is common STT
+   * noise and the right word often isn't the top-ranked candidate.
    */
   answersMatchAny(transcripts, expected) {
     if (!expected) return false;
@@ -66,7 +36,7 @@ export const speechInputService = {
     const given = (transcripts || []).filter(Boolean).map(normalize);
     if (given.length === 0) return false;
     if (given.some((g) => alternatives.includes(g))) return true;
-    return given.some((g) => alternatives.some((alt) => levenshtein(g, alt) <= fuzzyThreshold(alt)));
+    return given.some((g) => fuzzyMatchesAny(g, alternatives));
   },
 
   /** One-shot mic permission request, meant to be called directly from a tap so any OS prompt is allowed to appear. */

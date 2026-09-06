@@ -277,6 +277,15 @@ body {
   font-size: 0.85rem;
 }
 
+/* The correct-translation feedback in Quiz/Eintippen ("Richtig!" /
+   "Richtig wäre: ...") — bumped up from the muted, small .hint default so
+   it's easy to read at a glance instead of blending into the background. */
+.typing-result {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
 /* --- Direction / mode toggles (shared) --- */
 
 .direction-toggle {

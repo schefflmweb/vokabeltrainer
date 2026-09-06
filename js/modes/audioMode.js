@@ -11,7 +11,7 @@ import {
 } from '../ui/icons.js';
 
 const SESSION_SIZE = 15;
-const LISTEN_TIMEOUT_MS = 5000;
+const LISTEN_TIMEOUT_MS = 8000;
 const REVEAL_DELAY_MS = 3000;
 const AUTO_ADVANCE_DELAY_MS = 800;
 const TAP_AUTO_ADVANCE_BACKSTOP_MS = 6000;

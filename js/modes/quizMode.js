@@ -155,7 +155,7 @@ export function mount(container) {
           }).join('')}
         </div>
         <p class="hint btn-with-icon"><span class="icon-inline-wrap">${correct ? checkCircleIcon : xCircleIcon}</span> ${correct ? 'Richtig!' : `Richtig wäre: ${escapeHtml(correctAnswer)}`}</p>
-        <button class="btn btn-huge btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap icon-lg">${playIcon}</span></button>
+        <button class="btn btn-huge btn-compact btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap">${playIcon}</span></button>
       </div>`;
     container.querySelector('#next-btn').addEventListener('click', next);
   }
@@ -169,7 +169,7 @@ export function mount(container) {
         <div class="quiz-word">${escapeHtml(promptText(card))}</div>
         <form id="typing-form" class="typing-form">
           <input type="text" id="typing-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${placeholder}" />
-          <button type="submit" class="btn btn-huge btn-primary btn-with-icon"><span class="icon-inline-wrap icon-lg">${checkCircleIcon}</span> Prüfen</button>
+          <button type="submit" class="btn btn-huge btn-compact btn-primary btn-with-icon"><span class="icon-inline-wrap">${checkCircleIcon}</span> Prüfen</button>
         </form>
       </div>`;
 
@@ -194,7 +194,7 @@ export function mount(container) {
         <div class="quiz-word">${escapeHtml(promptText(card))}</div>
         <p class="typing-answer ${correct ? 'correct' : 'incorrect'}">${escapeHtml(value) || '–'}</p>
         <p class="hint btn-with-icon"><span class="icon-inline-wrap">${correct ? checkCircleIcon : xCircleIcon}</span> ${correct ? 'Richtig!' : `Richtig wäre: ${escapeHtml(correctAnswer)}`}</p>
-        <button class="btn btn-huge btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap icon-lg">${playIcon}</span></button>
+        <button class="btn btn-huge btn-compact btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap">${playIcon}</span></button>
       </div>`;
     container.querySelector('#next-btn').addEventListener('click', next);
   }

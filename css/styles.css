@@ -199,6 +199,16 @@ body {
   border-radius: 26px;
 }
 
+/* Used for mid-question buttons (Quiz's "Weiter"/"Prüfen") that sit below
+   other content — a blind-tap-sized button there just pushes the next
+   question off-screen and forces scrolling, which those buttons don't need
+   (unlike Auto mode's rate buttons, meant to be hit without looking). */
+.btn-huge.btn-compact {
+  min-height: auto;
+  padding: 18px 20px;
+  font-size: 1.3rem;
+}
+
 .btn-icon {
   background: none;
   border: none;

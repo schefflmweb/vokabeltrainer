@@ -94,3 +94,16 @@ export function parseCsv(text) {
   }
   return entries;
 }
+
+/** Serializes vocab entries back to comma-separated CSV text (with a header row) for export/backup. */
+export function toCsv(list) {
+  const escapeField = (value) => {
+    const str = String(value ?? '');
+    return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  };
+  const lines = ['en,de,category,example'];
+  for (const v of list) {
+    lines.push([v.en, v.de, v.category, v.example].map(escapeField).join(','));
+  }
+  return lines.join('\r\n');
+}

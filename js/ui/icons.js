@@ -101,3 +101,22 @@ export const checklistIcon = icon(`
   <rect x="4" y="16" width="3" height="3" rx="0.8"/>
   <path d="M10 6.5h10M10 12h10M10 17.5h10"/>
 `);
+
+export const editIcon = icon(`
+  <path d="M4 20l0.7-3.5L16.5 4.7a1.5 1.5 0 0 1 2.1 0l0.7 0.7a1.5 1.5 0 0 1 0 2.1L7.5 19.3 4 20z"/>
+  <path d="M14.5 6.7l2.8 2.8"/>
+`);
+
+export const flameIcon = icon(`
+  <path d="M12 3c1 3-3 4.5-3 8.5a3 3 0 0 0 6 0c.5-1 .3-2.3-0.3-3.2 1.5 1.5 2.3 3.5 2.3 5.7a5 5 0 0 1-10 0c0-4.2 2.3-6.3 3.5-8.2C10.9 5 11.5 4 12 3z"/>
+`);
+
+export const downloadIcon = icon(`
+  <path d="M12 4v11"/>
+  <path d="M7.5 11.5L12 16l4.5-4.5"/>
+  <path d="M5 19.5h14"/>
+`);
+
+export const chartIcon = icon(`
+  <path d="M4 20V10M10 20V4M16 20v-7M4 20h16"/>
+`);

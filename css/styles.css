@@ -539,9 +539,49 @@ body {
 
 /* Same specificity as ".manage-mode section" (class + type) so this actually
    overrides the flat background instead of losing to source order. */
-section.account-box {
+section.account-box,
+section.progress-box {
   background: linear-gradient(160deg, #f3effc 0%, var(--bg-elevated) 100%);
   margin-bottom: 20px;
+}
+
+.progress-box h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.stat-tile {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--accent-text);
+}
+
+.stat-with-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 
 .account-box .btn {
@@ -635,4 +675,47 @@ textarea:focus {
 
 .vocab-row:hover {
   background: var(--bg-elevated-2);
+}
+
+.row-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.vocab-row-editing {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 8px;
+  border-radius: 12px;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--accent);
+}
+
+.vocab-row-editing input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 0.95rem;
+  width: 100%;
+}
+
+.vocab-row-editing input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.25);
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.edit-actions .btn-icon.btn-primary {
+  background: var(--accent-gradient);
+  color: var(--accent-text);
 }

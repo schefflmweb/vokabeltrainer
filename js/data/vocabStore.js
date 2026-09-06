@@ -12,6 +12,21 @@ function normalizeEn(en) {
   return en.trim().toLowerCase();
 }
 
+function dateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+/** Records today as an active practice day, extending the streak if yesterday was also active. */
+async function touchStreak() {
+  const today = dateKey(new Date());
+  const lastDate = await db.getMeta('streakLastDate');
+  if (lastDate === today) return; // already counted today
+  const yesterday = dateKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
+  const count = (await db.getMeta('streakCount')) || 0;
+  await db.setMeta('streakLastDate', today);
+  await db.setMeta('streakCount', lastDate === yesterday ? count + 1 : 1);
+}
+
 /** Refreshes translation/category/example on an existing record without touching its learning progress. */
 function applyUpdate(record, { de, category, example }) {
   record.de = de.trim();
@@ -109,6 +124,20 @@ export const vocabStore = {
     return { added, updated };
   },
 
+  /** Directly overwrites an existing entry's fields by id — used for manual edits (a targeted single-record change, unlike add()'s collision-avoiding upsert). Learning progress is untouched. */
+  async update(id, { en, de, category, example }) {
+    const record = await db.get(id);
+    if (!record) return null;
+    record.en = en.trim();
+    record.de = de.trim();
+    record.category = category?.trim() || 'Eigene';
+    record.example = example?.trim() || '';
+    record.updatedAt = Date.now();
+    record.dirty = true;
+    await db.put(record);
+    return record;
+  },
+
   async remove(id) {
     const record = await db.get(id);
     if (!record) return;
@@ -133,7 +162,19 @@ export const vocabStore = {
     record.updatedAt = Date.now();
     record.dirty = true;
     await db.put(record);
+    touchStreak();
     return record;
+  },
+
+  /** Current practice-day streak, accounting for a day having passed without any review since the last one recorded. */
+  async getStreak() {
+    const lastDate = await db.getMeta('streakLastDate');
+    if (!lastDate) return { count: 0, activeToday: false };
+    const today = dateKey(new Date());
+    const yesterday = dateKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
+    const broken = lastDate !== today && lastDate !== yesterday;
+    const count = (await db.getMeta('streakCount')) || 0;
+    return { count: broken ? 0 : count, activeToday: lastDate === today };
   },
 
   async getDirty() {

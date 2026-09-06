@@ -1,8 +1,8 @@
 import { vocabStore } from '../data/vocabStore.js';
-import { parseCsv } from '../csv/csvImport.js';
+import { parseCsv, toCsv } from '../csv/csvImport.js';
 import { authService } from '../auth/authService.js';
 import { syncService } from '../data/syncService.js';
-import { trashIcon, searchIcon } from '../ui/icons.js';
+import { trashIcon, searchIcon, editIcon, checkCircleIcon, xCircleIcon, downloadIcon, chartIcon, flameIcon } from '../ui/icons.js';
 
 function filterVocab(list, query) {
   const q = query.trim().toLowerCase();
@@ -10,7 +10,21 @@ function filterVocab(list, query) {
   return list.filter((v) => v.en.toLowerCase().includes(q) || v.de.toLowerCase().includes(q));
 }
 
-function renderVocabRowsHtml(list) {
+function renderEditRowHtml(v) {
+  return `
+    <form class="vocab-row vocab-row-editing edit-form" data-id="${v.id}">
+      <input type="text" name="en" value="${escapeHtml(v.en)}" placeholder="Englisch" required />
+      <input type="text" name="de" value="${escapeHtml(v.de)}" placeholder="Deutsch" required />
+      <input type="text" name="category" value="${escapeHtml(v.category)}" placeholder="Kategorie" />
+      <input type="text" name="example" value="${escapeHtml(v.example || '')}" placeholder="Beispielsatz (optional)" />
+      <div class="edit-actions">
+        <button type="submit" class="btn btn-icon btn-primary" aria-label="Speichern"><span class="icon-inline-wrap">${checkCircleIcon}</span></button>
+        <button type="button" class="btn btn-icon cancel-edit-btn" aria-label="Abbrechen"><span class="icon-inline-wrap">${xCircleIcon}</span></button>
+      </div>
+    </form>`;
+}
+
+function renderVocabRowsHtml(list, editingId) {
   if (list.length === 0) {
     return `<p class="hint">Keine Treffer.</p>`;
   }
@@ -22,10 +36,13 @@ function renderVocabRowsHtml(list) {
   return categories.map((cat) => `
     <div class="vocab-category">
       <h4>${escapeHtml(cat)}</h4>
-      ${byCategory[cat].map((v) => `
+      ${byCategory[cat].map((v) => v.id === editingId ? renderEditRowHtml(v) : `
         <div class="vocab-row" data-id="${v.id}">
           <span>${escapeHtml(v.en)} – ${escapeHtml(v.de)}</span>
-          <button class="btn btn-icon delete-btn" data-id="${v.id}" aria-label="Löschen"><span class="icon-inline-wrap">${trashIcon}</span></button>
+          <span class="row-actions">
+            <button class="btn btn-icon edit-btn" data-id="${v.id}" aria-label="Bearbeiten"><span class="icon-inline-wrap">${editIcon}</span></button>
+            <button class="btn btn-icon delete-btn" data-id="${v.id}" aria-label="Löschen"><span class="icon-inline-wrap">${trashIcon}</span></button>
+          </span>
         </div>
       `).join('')}
     </div>
@@ -37,12 +54,39 @@ export function mount(container) {
   let csvStatusMessage = '';
   let searchQuery = '';
   let vocabCache = [];
+  let editingId = null;
 
-  function bindDeleteButtons(scopeEl) {
+  function bindRowActions(scopeEl) {
     scopeEl.querySelectorAll('.delete-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
         await vocabStore.remove(btn.dataset.id);
         syncService.sync();
+        render();
+      });
+    });
+
+    scopeEl.querySelectorAll('.edit-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        editingId = btn.dataset.id;
+        updateVocabListOnly();
+      });
+    });
+
+    scopeEl.querySelectorAll('.cancel-edit-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        editingId = null;
+        updateVocabListOnly();
+      });
+    });
+
+    scopeEl.querySelectorAll('.edit-form').forEach((form) => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(form).entries());
+        if (!data.en.trim() || !data.de.trim()) return;
+        await vocabStore.update(form.dataset.id, data);
+        syncService.sync();
+        editingId = null;
         render();
       });
     });
@@ -54,18 +98,59 @@ export function mount(container) {
     searchQuery = input ? input.value : searchQuery;
     const filtered = filterVocab(vocabCache, searchQuery);
     const listEl = container.querySelector('#vocab-list-container');
-    listEl.innerHTML = renderVocabRowsHtml(filtered);
-    bindDeleteButtons(listEl);
+    listEl.innerHTML = renderVocabRowsHtml(filtered, editingId);
+    bindRowActions(listEl);
     const countEl = container.querySelector('#vocab-count');
     if (countEl) countEl.textContent = filtered.length;
+  }
+
+  function exportCsv() {
+    const csv = toCsv(vocabCache);
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vokabeltrainer-export-${dateStr}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   async function render() {
     vocabCache = await vocabStore.getAll();
     const filtered = filterVocab(vocabCache, searchQuery);
 
+    const now = Date.now();
+    const dueToday = vocabCache.filter((v) => v.srs.dueDate <= now).length;
+    const learned = vocabCache.filter((v) => v.srs.repetitions >= 2).length;
+    const streak = await vocabStore.getStreak();
+
     container.innerHTML = `
       <div class="manage-mode pad">
+        <section class="progress-box">
+          <h3><span class="icon-inline-wrap">${chartIcon}</span> Fortschritt</h3>
+          <div class="stats-grid">
+            <div class="stat-tile">
+              <div class="stat-value">${vocabCache.length}</div>
+              <div class="stat-label">Vokabeln gesamt</div>
+            </div>
+            <div class="stat-tile">
+              <div class="stat-value">${dueToday}</div>
+              <div class="stat-label">Heute fällig</div>
+            </div>
+            <div class="stat-tile">
+              <div class="stat-value">${learned}</div>
+              <div class="stat-label">Gelernt</div>
+            </div>
+            <div class="stat-tile">
+              <div class="stat-value stat-with-icon"><span class="icon-inline-wrap">${flameIcon}</span> ${streak.count}</div>
+              <div class="stat-label">Tage in Folge</div>
+            </div>
+          </div>
+        </section>
+
         <section class="account-box" id="account-box"></section>
 
         <section>
@@ -80,12 +165,13 @@ export function mount(container) {
         </section>
 
         <section>
-          <h3>CSV-Import</h3>
+          <h3>CSV-Import &amp; Export</h3>
           <p class="hint">Spalten: Englisch, Deutsch, Kategorie (optional), Beispiel (optional)</p>
           <input type="file" id="csv-file" accept=".csv,text/csv" />
           <textarea id="csv-text" rows="4" placeholder="cat,Katze&#10;dog,Hund"></textarea>
           <button class="btn btn-secondary" id="csv-import-btn">Importieren</button>
           <p id="csv-status" class="hint">${escapeHtml(csvStatusMessage)}</p>
+          <button class="btn btn-secondary btn-with-icon" id="csv-export-btn"><span class="icon-inline-wrap">${downloadIcon}</span> Als CSV exportieren</button>
         </section>
 
         <section>
@@ -94,7 +180,7 @@ export function mount(container) {
             <span class="icon-inline-wrap search-icon">${searchIcon}</span>
             <input type="text" id="vocab-search" class="search-input" placeholder="Suchen (Englisch oder Deutsch) …" value="${escapeHtml(searchQuery)}" />
           </div>
-          <div class="vocab-list" id="vocab-list-container">${renderVocabRowsHtml(filtered)}</div>
+          <div class="vocab-list" id="vocab-list-container">${renderVocabRowsHtml(filtered, editingId)}</div>
         </section>
 
         <section>
@@ -114,9 +200,11 @@ export function mount(container) {
       render();
     });
 
-    bindDeleteButtons(container.querySelector('#vocab-list-container'));
+    bindRowActions(container.querySelector('#vocab-list-container'));
 
     container.querySelector('#vocab-search').addEventListener('input', updateVocabListOnly);
+
+    container.querySelector('#csv-export-btn').addEventListener('click', exportCsv);
 
     container.querySelector('#delete-all-btn').addEventListener('click', async () => {
       const count = vocabCache.length;

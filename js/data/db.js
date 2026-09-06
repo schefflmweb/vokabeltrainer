@@ -1,7 +1,8 @@
 const DB_NAME = 'vokabeltrainer';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_VOCAB = 'vocab';
 const STORE_META = 'meta';
+const STORE_GRAMMAR = 'grammar';
 
 let dbPromise = null;
 
@@ -20,6 +21,15 @@ function openDb() {
       if (!db.objectStoreNames.contains(STORE_META)) {
         db.createObjectStore(STORE_META, { keyPath: 'key' });
       }
+      // v2: grammar exercises, added alongside vocab — same shape of store
+      // (id/srs/dirty), kept separate so its indices/records never mix with
+      // vocab's.
+      if (!db.objectStoreNames.contains(STORE_GRAMMAR)) {
+        const store = db.createObjectStore(STORE_GRAMMAR, { keyPath: 'id' });
+        store.createIndex('dueDate', 'srs.dueDate', { unique: false });
+        store.createIndex('dirty', 'dirty', { unique: false });
+        store.createIndex('topic', 'topic', { unique: false });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -37,6 +47,8 @@ function wrapRequest(req) {
     req.onerror = () => reject(req.error);
   });
 }
+
+export const STORE_NAMES = { VOCAB: STORE_VOCAB, META: STORE_META, GRAMMAR: STORE_GRAMMAR };
 
 export const db = {
   async getAll(storeName = STORE_VOCAB) {

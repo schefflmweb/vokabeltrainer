@@ -1,9 +1,10 @@
 import { vocabStore } from '../data/vocabStore.js';
-import { parseCsv, toCsv } from '../csv/csvImport.js';
+import { grammarStore } from '../data/grammarStore.js';
+import { parseCsv, toCsv, parseGrammarCsv, grammarToCsv } from '../csv/csvImport.js';
 import { authService } from '../auth/authService.js';
 import { syncService } from '../data/syncService.js';
 import { ttsService } from '../tts/ttsService.js';
-import { trashIcon, searchIcon, editIcon, checkCircleIcon, xCircleIcon, downloadIcon, chartIcon, flameIcon, speakerIcon } from '../ui/icons.js';
+import { trashIcon, searchIcon, editIcon, checkCircleIcon, xCircleIcon, downloadIcon, chartIcon, flameIcon, speakerIcon, bookIcon } from '../ui/icons.js';
 
 const VOICE_SAMPLES = { en: 'This is what I sound like.', de: 'So höre ich mich an.' };
 
@@ -63,8 +64,10 @@ export function mount(container) {
   let unsubscribeStatus = null;
   let unsubscribeVoices = null;
   let csvStatusMessage = '';
+  let grammarCsvStatusMessage = '';
   let searchQuery = '';
   let vocabCache = [];
+  let grammarCount = 0;
   let editingId = null;
 
   function bindRowActions(scopeEl) {
@@ -129,9 +132,25 @@ export function mount(container) {
     URL.revokeObjectURL(url);
   }
 
+  function exportGrammarCsv(list) {
+    const csv = grammarToCsv(list);
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `grammatik-export-${dateStr}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   async function render() {
     vocabCache = await vocabStore.getAll();
     const filtered = filterVocab(vocabCache, searchQuery);
+    const grammarAll = await grammarStore.getAll();
+    grammarCount = grammarAll.length;
 
     const now = Date.now();
     const dueToday = vocabCache.filter((v) => v.srs.dueDate <= now).length;
@@ -203,6 +222,17 @@ export function mount(container) {
           <p class="hint">Löscht deine komplette Vokabelliste unwiderruflich (inkl. Lernfortschritt) — z. B. um danach nur eine eigene CSV frisch zu importieren.</p>
           <button class="btn btn-danger btn-with-icon" id="delete-all-btn"><span class="icon-inline-wrap">${trashIcon}</span> Alle Vokabeln löschen</button>
         </section>
+
+        <section>
+          <h3><span class="icon-inline-wrap">${bookIcon}</span> Grammatik (${grammarCount})</h3>
+          <p class="hint">Eigene Übungen per CSV importieren, zusätzlich zum eingebauten Grundstock. Spalten: Thema, Frage (___ für die Lücke), Option1, Option2, Option3, Option4, Richtig (1-4), Erklärung (optional)</p>
+          <input type="file" id="grammar-csv-file" accept=".csv,text/csv" />
+          <textarea id="grammar-csv-text" rows="4" placeholder="Präpositionen,I was born ___ 1995.,in,on,at,since,1,Jahre: in"></textarea>
+          <button class="btn btn-secondary" id="grammar-csv-import-btn">Importieren</button>
+          <p id="grammar-csv-status" class="hint">${escapeHtml(grammarCsvStatusMessage)}</p>
+          <button class="btn btn-secondary btn-with-icon" id="grammar-csv-export-btn"><span class="icon-inline-wrap">${downloadIcon}</span> Als CSV exportieren</button>
+          <button class="btn btn-danger btn-with-icon" id="grammar-delete-all-btn"><span class="icon-inline-wrap">${trashIcon}</span> Alle Grammatikübungen löschen</button>
+        </section>
       </div>`;
 
     container.querySelector('#add-form').addEventListener('submit', async (e) => {
@@ -249,6 +279,35 @@ export function mount(container) {
       csvStatusMessage = updated.length > 0
         ? `${added.length} neu hinzugefügt, ${updated.length} bereits vorhandene aktualisiert.`
         : `${added.length} Vokabeln importiert.`;
+      render();
+    });
+
+    container.querySelector('#grammar-csv-file').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      container.querySelector('#grammar-csv-text').value = await file.text();
+    });
+
+    container.querySelector('#grammar-csv-import-btn').addEventListener('click', async () => {
+      const text = container.querySelector('#grammar-csv-text').value;
+      const entries = parseGrammarCsv(text);
+      if (entries.length === 0) {
+        grammarCsvStatusMessage = 'Keine gültigen Zeilen gefunden.';
+        container.querySelector('#grammar-csv-status').textContent = grammarCsvStatusMessage;
+        return;
+      }
+      const { added, updated } = await grammarStore.addMany(entries);
+      grammarCsvStatusMessage = updated.length > 0
+        ? `${added.length} neu hinzugefügt, ${updated.length} bereits vorhandene aktualisiert.`
+        : `${added.length} Übungen importiert.`;
+      render();
+    });
+
+    container.querySelector('#grammar-csv-export-btn').addEventListener('click', () => exportGrammarCsv(grammarAll));
+
+    container.querySelector('#grammar-delete-all-btn').addEventListener('click', async () => {
+      if (!confirm(`Wirklich alle ${grammarCount} Grammatikübungen (inkl. Fortschritt) unwiderruflich löschen?`)) return;
+      await grammarStore.removeAll();
       render();
     });
 

@@ -524,6 +524,21 @@ body {
   z-index: 3;
 }
 
+/* Grammar's prompt is a full sentence (with a blank), not a single word —
+   left-aligned and a bit smaller so longer sentences wrap comfortably
+   instead of looking like shouted single words. */
+.grammar-sentence {
+  text-align: left;
+  font-size: 1.2rem;
+  line-height: 1.4;
+}
+
+.grammar-explanation {
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
 .quiz-options {
   display: grid;
   gap: 8px;
@@ -685,7 +700,8 @@ section.progress-box {
   width: 64px;
 }
 
-.voice-select {
+.voice-select,
+.field-select {
   flex: 1;
   min-width: 0;
   background: var(--bg-elevated-2);
@@ -696,10 +712,15 @@ section.progress-box {
   font-size: 0.95rem;
 }
 
-.voice-select:focus {
+.voice-select:focus,
+.field-select:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.25);
+}
+
+.field-select {
+  width: 100%;
 }
 
 .voice-row .btn-icon {

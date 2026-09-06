@@ -108,3 +108,47 @@ export function toCsv(list) {
   }
   return lines.join('\r\n');
 }
+
+/**
+ * Parses CSV/semicolon-separated grammar exercises with columns: topic,
+ * question (use ___ for the blank), option1, option2, option3, option4,
+ * correct (1-4), explanation? A header row (first cell "topic"/"thema") is
+ * detected and skipped.
+ */
+export function parseGrammarCsv(text) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+  if (lines.length === 0) return [];
+
+  const delimiter = detectDelimiter(lines);
+
+  let start = 0;
+  const first = parseLine(lines[0], delimiter).map((c) => c.toLowerCase());
+  if (first[0] === 'topic' || first[0] === 'thema') {
+    start = 1;
+  }
+
+  const entries = [];
+  for (let i = start; i < lines.length; i++) {
+    const cols = parseLine(lines[i], delimiter);
+    const [topic, question, opt1, opt2, opt3, opt4, correct, explanation] = cols;
+    const options = [opt1, opt2, opt3, opt4].filter((o) => o && o.length > 0);
+    const correctIndex = parseInt(correct, 10) - 1;
+    if (!question || options.length < 2 || !Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= options.length) continue;
+    entries.push({ topic: topic || 'Eigene', question, options, correctIndex, explanation: explanation || '' });
+  }
+  return entries;
+}
+
+/** Serializes grammar exercises back to comma-separated CSV text (with a header row) for export/backup. */
+export function grammarToCsv(list) {
+  const escapeField = (value) => {
+    const str = String(value ?? '');
+    return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  };
+  const lines = ['topic,question,option1,option2,option3,option4,correct,explanation'];
+  for (const g of list) {
+    const opts = [0, 1, 2, 3].map((i) => g.options[i] ?? '');
+    lines.push([g.topic, g.question, ...opts, g.correctIndex + 1, g.explanation].map(escapeField).join(','));
+  }
+  return lines.join('\r\n');
+}

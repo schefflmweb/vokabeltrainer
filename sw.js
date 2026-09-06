@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'vokabeltrainer-v1';
+const CACHE_VERSION = 'vokabeltrainer-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ const APP_SHELL = [
   './js/app.js',
   './js/data/db.js',
   './js/data/vocabStore.js',
+  './js/data/grammarStore.js',
   './js/data/syncService.js',
   './js/auth/authService.js',
   './js/srs/scheduler.js',
@@ -19,8 +20,10 @@ const APP_SHELL = [
   './js/ui/icons.js',
   './js/modes/audioMode.js',
   './js/modes/quizMode.js',
+  './js/modes/grammarMode.js',
   './js/modes/manageMode.js',
   './js/csv/csvImport.js',
+  './data/starter-grammar.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',

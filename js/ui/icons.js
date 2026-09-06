@@ -120,3 +120,8 @@ export const downloadIcon = icon(`
 export const chartIcon = icon(`
   <path d="M4 20V10M10 20V4M16 20v-7M4 20h16"/>
 `);
+
+export const bookIcon = icon(`
+  <path d="M4 6.2c2.4-1.1 5-1.1 7 0v12c-2-1.1-4.6-1.1-7 0z"/>
+  <path d="M20 6.2c-2.4-1.1-5-1.1-7 0v12c2-1.1 4.6-1.1 7 0z"/>
+`);

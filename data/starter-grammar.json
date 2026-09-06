@@ -1,0 +1,61 @@
+[
+  { "id": "starter-01", "topic": "Simple Present / Present Continuous", "question": "She ___ to school every day.", "options": ["go", "goes", "is going", "going"], "correctIndex": 1, "explanation": "Bei \"she/he/it\" + regelmäßiger Handlung: Simple Present mit -s." },
+  { "id": "starter-02", "topic": "Simple Present / Present Continuous", "question": "Look! It ___ outside.", "options": ["rains", "rain", "is raining", "rained"], "correctIndex": 2, "explanation": "\"Look!\" zeigt eine Handlung, die JETZT passiert → Present Continuous." },
+  { "id": "starter-03", "topic": "Simple Present / Present Continuous", "question": "I usually ___ coffee in the morning.", "options": ["drink", "drinks", "am drinking", "drank"], "correctIndex": 0, "explanation": "\"usually\" = Gewohnheit → Simple Present." },
+  { "id": "starter-04", "topic": "Simple Present / Present Continuous", "question": "Right now, they ___ a movie.", "options": ["watch", "watches", "are watching", "watched"], "correctIndex": 2, "explanation": "\"Right now\" → Present Continuous." },
+  { "id": "starter-05", "topic": "Simple Present / Present Continuous", "question": "Water ___ at 100 degrees Celsius.", "options": ["boil", "boils", "is boiling", "boiled"], "correctIndex": 1, "explanation": "Allgemeine Tatsache → Simple Present." },
+
+  { "id": "starter-06", "topic": "Simple Past / Present Perfect", "question": "I ___ to Paris in 2019.", "options": ["have gone", "went", "go", "have been"], "correctIndex": 1, "explanation": "Konkreter Zeitpunkt (2019) → Simple Past." },
+  { "id": "starter-07", "topic": "Simple Past / Present Perfect", "question": "She ___ her homework already.", "options": ["did", "has done", "does", "do"], "correctIndex": 1, "explanation": "\"already\" ohne konkreten Zeitpunkt → Present Perfect." },
+  { "id": "starter-08", "topic": "Simple Past / Present Perfect", "question": "We ___ that film yet.", "options": ["haven't seen", "didn't see", "don't see", "hasn't seen"], "correctIndex": 0, "explanation": "\"yet\" in verneinten Sätzen → Present Perfect." },
+  { "id": "starter-09", "topic": "Simple Past / Present Perfect", "question": "He ___ his car yesterday.", "options": ["has washed", "washed", "washes", "wash"], "correctIndex": 1, "explanation": "\"yesterday\" = konkreter Zeitpunkt → Simple Past." },
+  { "id": "starter-10", "topic": "Simple Past / Present Perfect", "question": "I have never ___ sushi before.", "options": ["eat", "eats", "eaten", "ate"], "correctIndex": 2, "explanation": "\"have never ___\" braucht das Partizip Perfekt (Present Perfect)." },
+
+  { "id": "starter-11", "topic": "will / going to", "question": "Look at those clouds! It ___ rain.", "options": ["will", "is going to", "is going", "would"], "correctIndex": 1, "explanation": "Sichtbares Anzeichen JETZT → \"going to\"-Zukunft." },
+  { "id": "starter-12", "topic": "will / going to", "question": "I think it ___ rain tomorrow.", "options": ["is going to", "will", "is going", "would"], "correctIndex": 1, "explanation": "Spontane Vermutung/Meinung → \"will\"." },
+  { "id": "starter-13", "topic": "will / going to", "question": "I've decided – I ___ study medicine.", "options": ["will", "am going to", "would", "am"], "correctIndex": 1, "explanation": "Bereits getroffene Entscheidung → \"going to\"." },
+  { "id": "starter-14", "topic": "will / going to", "question": "Don't worry, I ___ help you.", "options": ["am going to", "will", "am", "would"], "correctIndex": 1, "explanation": "Spontanes Versprechen im Sprechmoment → \"will\"." },
+  { "id": "starter-15", "topic": "will / going to", "question": "A: The phone is ringing. B: I ___ get it.", "options": ["will", "am going to", "going to", "would"], "correctIndex": 0, "explanation": "Spontane Entscheidung im Moment des Sprechens → \"will\"." },
+
+  { "id": "starter-16", "topic": "Artikel", "question": "I saw ___ elephant at the zoo.", "options": ["a", "an", "the", "–"], "correctIndex": 1, "explanation": "Vor einem Vokal-LAUT steht \"an\"." },
+  { "id": "starter-17", "topic": "Artikel", "question": "___ sun rises in the east.", "options": ["A", "An", "The", "–"], "correctIndex": 2, "explanation": "Einzigartige Dinge (die Sonne) bekommen \"the\"." },
+  { "id": "starter-18", "topic": "Artikel", "question": "She plays ___ piano very well.", "options": ["a", "an", "the", "–"], "correctIndex": 2, "explanation": "Musikinstrumente spielen: \"play the + Instrument\"." },
+  { "id": "starter-19", "topic": "Artikel", "question": "___ dogs are loyal animals.", "options": ["A", "An", "The", "–"], "correctIndex": 3, "explanation": "Allgemeine Aussagen über eine ganze Gattung (Plural) stehen ohne Artikel." },
+  { "id": "starter-20", "topic": "Artikel", "question": "He is ___ honest man.", "options": ["a", "an", "the", "–"], "correctIndex": 1, "explanation": "\"honest\" beginnt mit einem Vokal-LAUT (stummes h) → \"an\"." },
+
+  { "id": "starter-21", "topic": "Präpositionen", "question": "I was born ___ 1995.", "options": ["in", "on", "at", "since"], "correctIndex": 0, "explanation": "Jahre: \"in\"." },
+  { "id": "starter-22", "topic": "Präpositionen", "question": "The meeting is ___ Monday.", "options": ["in", "on", "at", "since"], "correctIndex": 1, "explanation": "Wochentage: \"on\"." },
+  { "id": "starter-23", "topic": "Präpositionen", "question": "See you ___ 5 o'clock.", "options": ["in", "on", "at", "since"], "correctIndex": 2, "explanation": "Uhrzeiten: \"at\"." },
+  { "id": "starter-24", "topic": "Präpositionen", "question": "I've lived here ___ ten years.", "options": ["for", "since", "in", "at"], "correctIndex": 0, "explanation": "Zeitspanne/Dauer → \"for\"." },
+  { "id": "starter-25", "topic": "Präpositionen", "question": "She has worked here ___ 2018.", "options": ["for", "since", "in", "at"], "correctIndex": 1, "explanation": "Startpunkt in der Zeit → \"since\"." },
+
+  { "id": "starter-26", "topic": "Steigerung", "question": "This book is ___ than that one.", "options": ["interesting", "more interesting", "most interesting", "interestinger"], "correctIndex": 1, "explanation": "Mehrsilbige Adjektive: \"more + Adjektiv\"." },
+  { "id": "starter-27", "topic": "Steigerung", "question": "Today is ___ day of my life!", "options": ["good", "better", "the best", "more good"], "correctIndex": 2, "explanation": "Der Superlativ von \"good\" ist unregelmäßig: \"the best\"." },
+  { "id": "starter-28", "topic": "Steigerung", "question": "She is ___ than her brother.", "options": ["tall", "taller", "tallest", "more tall"], "correctIndex": 1, "explanation": "Einsilbige Adjektive: Endung \"-er\"." },
+  { "id": "starter-29", "topic": "Steigerung", "question": "This is ___ expensive restaurant in town.", "options": ["more", "most", "the most", "the more"], "correctIndex": 2, "explanation": "Superlativ mehrsilbiger Adjektive: \"the most + Adjektiv\"." },
+  { "id": "starter-30", "topic": "Steigerung", "question": "My cat is ___ than yours.", "options": ["lazy", "lazier", "more lazy", "laziest"], "correctIndex": 1, "explanation": "Adjektive auf -y: y → i + er." },
+
+  { "id": "starter-31", "topic": "Modalverben", "question": "You ___ wear a uniform here — it's not required, but many students do.", "options": ["don't have to", "mustn't", "can't", "shouldn't"], "correctIndex": 0, "explanation": "Keine Pflicht (aber erlaubt) — nicht zu verwechseln mit \"mustn't\" (verboten)." },
+  { "id": "starter-32", "topic": "Modalverben", "question": "You ___ tell anyone — it's a secret!", "options": ["mustn't", "don't have to", "don't must", "can't have to"], "correctIndex": 0, "explanation": "Verbot → \"mustn't\"." },
+  { "id": "starter-33", "topic": "Modalverben", "question": "___ you help me with this bag? It's heavy.", "options": ["Could", "Must", "Shall", "Need"], "correctIndex": 0, "explanation": "\"Could you...?\" ist eine höfliche Bitte." },
+  { "id": "starter-34", "topic": "Modalverben", "question": "You ___ see a doctor if the pain continues.", "options": ["should", "must", "can", "needn't"], "correctIndex": 0, "explanation": "Rat/Empfehlung → \"should\"." },
+  { "id": "starter-35", "topic": "Modalverben", "question": "Students ___ bring their own laptops; the school provides them.", "options": ["don't have to", "mustn't", "shouldn't", "can't"], "correctIndex": 0, "explanation": "Keine Notwendigkeit → \"don't have to\"." },
+
+  { "id": "starter-36", "topic": "Bedingungssätze", "question": "If it rains tomorrow, we ___ the picnic.", "options": ["cancel", "will cancel", "would cancel", "cancelled"], "correctIndex": 1, "explanation": "Conditional Typ 1 (real/möglich): if + Simple Present, will + Infinitiv." },
+  { "id": "starter-37", "topic": "Bedingungssätze", "question": "If I ___ rich, I would travel the world.", "options": ["am", "was", "were", "will be"], "correctIndex": 2, "explanation": "Conditional Typ 2 (irreal): \"if I were\" — auch bei I/he/she im Konjunktiv." },
+  { "id": "starter-38", "topic": "Bedingungssätze", "question": "If you heat ice, it ___.", "options": ["melt", "melts", "will melt", "would melt"], "correctIndex": 1, "explanation": "Conditional Typ 0 (allgemeine Wahrheit): if + Simple Present, Simple Present." },
+  { "id": "starter-39", "topic": "Bedingungssätze", "question": "She would pass the exam if she ___ harder.", "options": ["study", "studies", "studied", "will study"], "correctIndex": 2, "explanation": "Conditional Typ 2: if + Simple Past, would + Infinitiv." },
+  { "id": "starter-40", "topic": "Bedingungssätze", "question": "If you don't hurry, you ___ the bus.", "options": ["miss", "will miss", "missed", "would miss"], "correctIndex": 1, "explanation": "Conditional Typ 1: if + Simple Present, will + Infinitiv." },
+
+  { "id": "starter-41", "topic": "Passiv", "question": "The letter ___ yesterday.", "options": ["sent", "was sent", "is sent", "has sent"], "correctIndex": 1, "explanation": "Passiv Vergangenheit: was/were + Partizip Perfekt." },
+  { "id": "starter-42", "topic": "Passiv", "question": "English ___ all over the world.", "options": ["speaks", "is spoken", "speaking", "spoke"], "correctIndex": 1, "explanation": "Passiv Gegenwart: is/are + Partizip Perfekt." },
+  { "id": "starter-43", "topic": "Passiv", "question": "This house ___ in 1890.", "options": ["built", "was built", "is built", "builds"], "correctIndex": 1, "explanation": "Passiv Vergangenheit: was/were + Partizip Perfekt." },
+  { "id": "starter-44", "topic": "Passiv", "question": "The homework must ___ by Friday.", "options": ["finish", "finished", "be finished", "finishing"], "correctIndex": 2, "explanation": "Passiv nach Modalverb: modal + be + Partizip Perfekt." },
+  { "id": "starter-45", "topic": "Passiv", "question": "The cake ___ right now by my grandmother.", "options": ["is being made", "was made", "is made", "made"], "correctIndex": 0, "explanation": "Passiv Verlaufsform Gegenwart: is/are being + Partizip Perfekt." },
+
+  { "id": "starter-46", "topic": "some / any / much / many", "question": "Is there ___ sugar in your coffee?", "options": ["some", "any", "much", "many"], "correctIndex": 1, "explanation": "In Fragesätzen: \"any\"." },
+  { "id": "starter-47", "topic": "some / any / much / many", "question": "I don't have ___ friends in this city.", "options": ["some", "any", "much", "many"], "correctIndex": 1, "explanation": "In Verneinungen: \"any\"." },
+  { "id": "starter-48", "topic": "some / any / much / many", "question": "There's ___ water in the bottle.", "options": ["some", "any", "much", "many"], "correctIndex": 0, "explanation": "Positive Aussage + unzählbares Nomen → \"some\"." },
+  { "id": "starter-49", "topic": "some / any / much / many", "question": "How ___ time do we have left?", "options": ["much", "many", "some", "any"], "correctIndex": 0, "explanation": "\"time\" ist unzählbar → \"much\"." },
+  { "id": "starter-50", "topic": "some / any / much / many", "question": "How ___ students are in your class?", "options": ["much", "many", "some", "any"], "correctIndex": 1, "explanation": "\"students\" ist zählbar (Plural) → \"many\"." }
+]

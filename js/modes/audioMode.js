@@ -204,10 +204,15 @@ export function mount(container) {
       autoAdvanceTimer = setTimeout(() => advanceCard(), AUTO_ADVANCE_DELAY_MS);
     } else {
       toneService.playIncorrect();
-      // Best-effort speech — the correct answer is also always shown as text.
-      ttsService.speakOnce(expected, answerLang(), { onEnd: () => advanceCard() });
+      // Wait for the tone to finish before speaking — Web Audio and
+      // speechSynthesis share no clock, so starting both at once played them
+      // on top of each other instead of one after the other.
+      setTimeout(() => {
+        // Best-effort speech — the correct answer is also always shown as text.
+        ttsService.speakOnce(expected, answerLang(), { onEnd: () => advanceCard() });
+      }, toneService.DURATION_MS);
       // Backstop in case onEnd never fires (e.g. speech silently dropped).
-      autoAdvanceTimer = setTimeout(() => advanceCard(), LISTEN_TIMEOUT_MS);
+      autoAdvanceTimer = setTimeout(() => advanceCard(), toneService.DURATION_MS + LISTEN_TIMEOUT_MS);
     }
   }
 

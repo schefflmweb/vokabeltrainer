@@ -39,6 +39,15 @@ function playTone(freqSequence, noteDuration = 0.12, gain = 0.18) {
 }
 
 export const toneService = {
+  /**
+   * How long playCorrect()/playIncorrect() take to finish (2 notes × 120ms +
+   * a little safety margin). Callers that also speak afterward should wait
+   * at least this long first — Web Audio and speechSynthesis are two
+   * independent audio paths with no shared clock, so starting both at once
+   * plays them on top of each other instead of one after the other.
+   */
+  DURATION_MS: 300,
+
   /** Call synchronously from the tap that starts a session. */
   unlock() {
     const ctx = getContext();

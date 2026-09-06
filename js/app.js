@@ -39,6 +39,9 @@ if ('serviceWorker' in navigator) {
 
 async function main() {
   await authService.ready();
+  // May navigate away and back (interactive re-login) if the cached session
+  // has expired — only safe to do here, before the user has picked a mode.
+  await authService.ensureSignedIn();
   triggerSync();
 
   const initial = (location.hash || '#audio').slice(1);

@@ -445,7 +445,16 @@ body {
 /* --- Quiz mode --- */
 
 .quiz-mode {
-  height: 100%;
+  /* min-height (not height): a fixed height would cap this box at exactly the
+     screen's visible height, so content taller than that (e.g. typing mode
+     once the iOS keyboard eats vertical space) would only overflow it
+     visually without growing its own box — and since .quiz-word's sticky
+     positioning is computed relative to THIS box, a capped box scrolls away
+     as a whole and drags the "stuck" word off-screen with it. min-height
+     lets the box grow to fit all its content when needed, matching #view's
+     actual scrollable area, while still filling the screen (via the 100%
+     floor) in the normal case where content already fits. */
+  min-height: 100%;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -467,16 +476,6 @@ body {
   gap: 10px;
 }
 
-/* Used by typing mode instead of .quiz-content: no flex-grow, so it (and the
-   input/button right after it) pack near the top of the screen rather than
-   being stretched down to the bottom — keeps the input well clear of where
-   the on-screen keyboard covers, without relying on scroll-into-view. */
-.quiz-content-compact {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
 .quiz-word {
   font-size: 1.5rem;
   font-weight: 800;
@@ -486,6 +485,13 @@ body {
   border: 1px solid var(--border);
   border-radius: 18px;
   box-shadow: var(--shadow-sm);
+  /* Pinned to the top of the scrolling area so the word being tested can
+     never scroll out of view — including when the iOS keyboard opens and
+     Safari scrolls the focused input into view on its own, separately from
+     (and not fully preventable via) the input's own focus() call. */
+  position: sticky;
+  top: 0;
+  z-index: 3;
 }
 
 .quiz-options {

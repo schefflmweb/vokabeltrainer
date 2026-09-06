@@ -169,10 +169,8 @@ export function mount(container) {
     const placeholder = direction === 'en-de' ? 'Deutsche Übersetzung' : 'Englische Übersetzung';
     container.innerHTML = `
       <div class="quiz-mode">
-        <div class="quiz-content-compact">
-          ${progressBarHtml(index, queue.length)}
-          <div class="quiz-word">${escapeHtml(promptText(card))}</div>
-        </div>
+        ${progressBarHtml(index, queue.length)}
+        <div class="quiz-word">${escapeHtml(promptText(card))}</div>
         <form id="typing-form" class="typing-form">
           <input type="text" id="typing-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="${placeholder}" />
           <button type="submit" class="btn btn-huge btn-compact btn-primary btn-with-icon"><span class="icon-inline-wrap">${checkCircleIcon}</span> Prüfen</button>
@@ -201,13 +199,11 @@ export function mount(container) {
     const correctAnswer = answerText(card);
     container.innerHTML = `
       <div class="quiz-mode">
-        <div class="quiz-content-compact">
-          ${progressBarHtml(index, queue.length)}
-          <div class="quiz-word">${escapeHtml(promptText(card))}</div>
-          <p class="typing-answer ${correct ? 'correct' : 'incorrect'}">${escapeHtml(value) || '–'}</p>
-          <p class="hint btn-with-icon"><span class="icon-inline-wrap">${correct ? checkCircleIcon : xCircleIcon}</span> ${correct ? 'Richtig!' : `Richtig wäre: ${escapeHtml(correctAnswer)}`}</p>
-          <button class="btn btn-huge btn-compact btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap">${playIcon}</span></button>
-        </div>
+        ${progressBarHtml(index, queue.length)}
+        <div class="quiz-word">${escapeHtml(promptText(card))}</div>
+        <p class="typing-answer ${correct ? 'correct' : 'incorrect'}">${escapeHtml(value) || '–'}</p>
+        <p class="hint btn-with-icon"><span class="icon-inline-wrap">${correct ? checkCircleIcon : xCircleIcon}</span> ${correct ? 'Richtig!' : `Richtig wäre: ${escapeHtml(correctAnswer)}`}</p>
+        <button class="btn btn-huge btn-compact btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap">${playIcon}</span></button>
       </div>`;
     container.querySelector('#next-btn').addEventListener('click', next);
   }

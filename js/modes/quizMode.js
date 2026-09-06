@@ -81,7 +81,7 @@ export function mount(container) {
 
   function renderSelect() {
     container.innerHTML = `
-      <div class="quiz-mode pad center">
+      <div class="quiz-mode pad center-text">
         <p class="hint">Übungsrichtung</p>
         <div class="direction-toggle">
           <button class="btn toggle-btn ${direction === 'en-de' ? 'active' : ''}" id="dir-en-de">${flagGB} → ${flagDE} Englisch → Deutsch</button>
@@ -89,11 +89,11 @@ export function mount(container) {
         </div>
 
         <p class="hint">Wie möchtest du üben?</p>
-        <button class="btn btn-huge quiz-choice-btn btn-primary btn-with-icon" id="start-choice">
+        <button class="btn btn-huge mode-choice-btn btn-primary btn-with-icon" id="start-choice">
           <span class="icon-inline-wrap icon-lg">${checklistIcon}</span>
           <span>Multiple Choice<span class="hint">Antwort antippen</span></span>
         </button>
-        <button class="btn btn-huge quiz-choice-btn btn-secondary btn-with-icon" id="start-typing">
+        <button class="btn btn-huge mode-choice-btn btn-secondary btn-with-icon" id="start-typing">
           <span class="icon-inline-wrap icon-lg">${keyboardIcon}</span>
           <span>Eintippen<span class="hint">Übersetzung selbst schreiben</span></span>
         </button>

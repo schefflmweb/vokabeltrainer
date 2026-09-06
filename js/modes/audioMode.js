@@ -306,7 +306,7 @@ export function mount(container) {
     const ready = !!pendingQueue;
     const voiceSupported = speechInputService.isSupported();
     container.innerHTML = `
-      <div class="audio-mode pad center">
+      <div class="audio-mode pad center-text">
         <p class="hint">Übungsrichtung</p>
         <div class="direction-toggle">
           <button class="btn toggle-btn ${direction === 'en-de' ? 'active' : ''}" id="dir-en-de">${flagGB} → ${flagDE} Englisch → Deutsch</button>
@@ -322,10 +322,9 @@ export function mount(container) {
         ${interactionMode === 'voice' ? `<p class="hint"><span class="icon-inline-wrap">${warningIcon}</span> Funktioniert nur, wenn die Seite direkt in Safari geöffnet ist (nicht das installierte Icon vom Home-Bildschirm).</p>` : ''}
 
         <p class="hint">Auto-Modus: pro Karte ein großer Tap. Kein Hinsehen nötig.</p>
-        <button class="btn btn-huge btn-primary btn-with-icon" id="start-btn" ${ready ? '' : 'disabled'}>
-          ${ready
-            ? `<span class="icon-inline-wrap icon-lg">${playIcon}</span> Los geht's`
-            : `<span class="icon-inline-wrap icon-lg">${hourglassIcon}</span> Lädt …`}
+        <button class="btn btn-huge mode-choice-btn btn-primary btn-with-icon" id="start-btn" ${ready ? '' : 'disabled'}>
+          <span class="icon-inline-wrap icon-lg">${ready ? playIcon : hourglassIcon}</span>
+          <span>${ready ? "Los geht's" : 'Lädt …'}</span>
         </button>
       </div>`;
     container.querySelector('#dir-en-de').addEventListener('click', () => setDirection('en-de'));

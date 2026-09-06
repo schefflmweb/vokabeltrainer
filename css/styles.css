@@ -86,6 +86,17 @@ body {
   gap: 16px;
 }
 
+/* Text-centering only, no vertical centering — used instead of .center on
+   the Auto/Quiz/Grammatik start screens. Those three differ quite a bit in
+   how much content they have (Auto's extra "Eingabeart" toggle row,
+   Grammatik's single dropdown vs. Quiz's two mode buttons), so vertically
+   centering each would float its content to a different height and make
+   switching between the nav tabs look like everything jumps around. Content
+   starting at a fixed top offset instead stays visually stable. */
+.center-text {
+  text-align: center;
+}
+
 .hint {
   color: var(--text-muted);
   font-size: 0.95rem;
@@ -214,23 +225,26 @@ body {
   flex-shrink: 0;
 }
 
-/* Mode-choice buttons on Quiz's start screen (Multiple Choice / Eintippen):
-   much smaller than the driving-mode .btn-huge default (which they'd
-   otherwise inherit) so both fit on one iPhone screen together with the
-   direction toggle above them, with no scrolling needed. */
-.quiz-choice-btn {
+/* Start buttons on Auto/Quiz/Grammatik's select screens (Los geht's/Multiple
+   Choice/Eintippen/Übung starten): much smaller than the driving-mode
+   .btn-huge default (which they'd otherwise inherit) so they all fit on one
+   iPhone screen, with no scrolling needed — and, just as importantly, so
+   they're the same size across all three, instead of Auto's being huge
+   while Quiz/Grammatik's are compact (see .center-text's comment on tab
+   switching). */
+.mode-choice-btn {
   min-height: auto;
   padding: 14px 18px;
   font-size: 1.15rem;
 }
 
-.quiz-choice-btn .icon-inline-wrap.icon-lg {
+.mode-choice-btn .icon-inline-wrap.icon-lg {
   width: 24px;
   height: 24px;
   vertical-align: -7px;
 }
 
-.quiz-choice-btn .hint {
+.mode-choice-btn .hint {
   font-size: 0.78rem;
   margin-top: 3px;
 }
@@ -370,25 +384,18 @@ body {
   vertical-align: 0;
 }
 
-#start-btn {
-  font-weight: 400;
-  font-size: 1.85rem;
-  gap: 10px;
-}
-
-#start-btn .icon-inline-wrap {
-  width: 42px;
-  height: 42px;
-}
-
 /* --- Audio mode (car use): oversized, high-contrast, minimal reading --- */
 
 .audio-mode {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  padding: 16px;
-  gap: 12px;
+  /* min-height (not height): matches .quiz-mode — see its comment for why a
+     fixed height risks capping this box below its actual content. */
+  min-height: 100%;
+  /* Padding/gap match .quiz-mode's so Auto/Quiz/Grammatik share the same
+     visual rhythm when switching between their nav tabs. */
+  padding: 12px;
+  gap: 10px;
 }
 
 .card-display {

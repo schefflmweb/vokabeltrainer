@@ -58,13 +58,13 @@ export function mount(container) {
 
   function renderSelect() {
     container.innerHTML = `
-      <div class="quiz-mode pad center">
+      <div class="quiz-mode pad center-text">
         <p class="hint">Thema</p>
         <select class="field-select" id="topic-select">
           <option value="">Alle Themen (gemischt)</option>
           ${topics.map((t) => `<option value="${escapeHtml(t)}" ${t === selectedTopic ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
         </select>
-        <button class="btn btn-huge quiz-choice-btn btn-primary btn-with-icon" id="start-btn">
+        <button class="btn btn-huge mode-choice-btn btn-primary btn-with-icon" id="start-btn">
           <span class="icon-inline-wrap icon-lg">${bookIcon}</span>
           <span>Übung starten<span class="hint">Multiple Choice</span></span>
         </button>

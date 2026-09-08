@@ -3,6 +3,7 @@ import { ttsService } from '../tts/ttsService.js';
 import { syncService } from '../data/syncService.js';
 import { speechInputService } from '../stt/speechInputService.js';
 import { toneService } from '../audio/toneService.js';
+import { audioSessionUnlock } from '../audio/audioSessionUnlock.js';
 import { progressBarHtml } from '../ui/progressBar.js';
 import { flagGB, flagDE } from '../ui/flags.js';
 import {
@@ -90,6 +91,7 @@ export function mount(container) {
   function startSession() {
     if (!pendingQueue) return; // guarded by disabled button; shouldn't fire
     toneService.unlock(); // real tap — unlocks Web Audio for the rest of this session
+    audioSessionUnlock.start(); // real tap — nudges iOS toward routing audio to Bluetooth (see module doc)
     queue = pendingQueue;
     index = 0;
     stats = { known: 0, unknown: 0 };
@@ -446,6 +448,7 @@ export function mount(container) {
     if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
     activeListen?.stop();
     ttsService.stop();
+    audioSessionUnlock.stop();
   };
 }
 

@@ -16,6 +16,11 @@ const LISTEN_TIMEOUT_MS = 8000;
 const REVEAL_DELAY_MS = 3000;
 const AUTO_ADVANCE_DELAY_MS = 800;
 const TAP_AUTO_ADVANCE_BACKSTOP_MS = 6000;
+// Backstop for the primary word's speakOnce() onEnd, in case it never fires
+// (speech silently dropped) — same reasoning as the other best-effort speech
+// chains in this file. Generous, since a real long word/phrase should still
+// finish speaking well within it.
+const PRIMARY_SPEECH_BACKSTOP_MS = 4000;
 
 export function mount(container) {
   let direction = 'en-de'; // 'en-de' | 'de-en'
@@ -41,6 +46,15 @@ export function mount(container) {
     if (tapRevealTimer) {
       clearTimeout(tapRevealTimer);
       tapRevealTimer = null;
+    }
+  }
+
+  // Backstop for the primary word's speakOnce() — see enterCard().
+  let primarySpeechTimer = null;
+  function clearPrimarySpeechTimer() {
+    if (primarySpeechTimer) {
+      clearTimeout(primarySpeechTimer);
+      primarySpeechTimer = null;
     }
   }
 
@@ -102,6 +116,7 @@ export function mount(container) {
 
   function backToSelect() {
     clearRevealTimer();
+    clearPrimarySpeechTimer();
     if (autoAdvanceTimer) {
       clearTimeout(autoAdvanceTimer);
       autoAdvanceTimer = null;
@@ -127,9 +142,23 @@ export function mount(container) {
     if (interactionMode === 'tap') {
       tapRevealed = false;
       render();
-      ttsService.speakOnce(primaryText(card), promptLang()); // only the source word for now
       clearRevealTimer();
-      tapRevealTimer = setTimeout(() => revealTranslation(card), REVEAL_DELAY_MS);
+      clearPrimarySpeechTimer();
+      // Thinking time (REVEAL_DELAY_MS) is meant to start once the word has
+      // actually finished being spoken — not the moment speak() was called,
+      // which would cut it short (or start the reveal mid-word) for longer
+      // words. onEnd fires when playback genuinely finishes; the backstop
+      // covers the case where it silently never fires at all.
+      let revealStarted = false;
+      const startReveal = () => {
+        if (revealStarted) return;
+        revealStarted = true;
+        clearPrimarySpeechTimer();
+        if (currentCard() !== card) return; // card changed while speech was playing
+        tapRevealTimer = setTimeout(() => revealTranslation(card), REVEAL_DELAY_MS);
+      };
+      ttsService.speakOnce(primaryText(card), promptLang(), { onEnd: startReveal });
+      primarySpeechTimer = setTimeout(startReveal, PRIMARY_SPEECH_BACKSTOP_MS);
       return;
     }
 
@@ -262,6 +291,7 @@ export function mount(container) {
     const card = currentCard();
     if (!card) return;
     clearRevealTimer();
+    clearPrimarySpeechTimer();
     if (autoAdvanceTimer) {
       clearTimeout(autoAdvanceTimer);
       autoAdvanceTimer = null;
@@ -445,6 +475,7 @@ export function mount(container) {
 
   return () => {
     clearRevealTimer();
+    clearPrimarySpeechTimer();
     if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
     activeListen?.stop();
     ttsService.stop();

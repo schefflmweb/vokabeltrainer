@@ -21,6 +21,20 @@ const TAP_AUTO_ADVANCE_BACKSTOP_MS = 6000;
 // chains in this file. Generous, since a real long word/phrase should still
 // finish speaking well within it.
 const PRIMARY_SPEECH_BACKSTOP_MS = 4000;
+// Pause after the translation finishes speaking, before auto-advancing to
+// the next card — and the window in which a spoken "Stop" is listened for.
+const STOP_LISTEN_WINDOW_MS = 2000;
+const STOP_WORDS = ['stop', 'stopp'];
+const RESUME_WORDS = ['weiter'];
+
+function normalizeCommand(str) {
+  return str.trim().toLowerCase().replace(/[.,!?;:]+$/g, '');
+}
+
+/** True if any recognition candidate (best-first) matches one of `keywords` exactly. */
+function matchesCommand(transcripts, keywords) {
+  return (transcripts || []).some((t) => keywords.includes(normalizeCommand(t)));
+}
 
 export function mount(container) {
   let direction = 'en-de'; // 'en-de' | 'de-en'
@@ -42,6 +56,9 @@ export function mount(container) {
   // room for active recall before it's shown/spoken.
   let tapRevealed = false;
   let tapRevealTimer = null;
+  // True while waiting for a spoken "Weiter" after the user said "Stop"
+  // during the post-translation pause — see afterTranslationSpoken().
+  let tapPaused = false;
   function clearRevealTimer() {
     if (tapRevealTimer) {
       clearTimeout(tapRevealTimer);
@@ -98,7 +115,10 @@ export function mount(container) {
 
   function setInteractionMode(mode) {
     interactionMode = mode;
-    if (mode === 'voice') speechInputService.requestMicPermission();
+    // Both modes may use the mic now: voice mode for the answer itself,
+    // tap mode for the "Stop"/"Weiter" pause commands (see
+    // afterTranslationSpoken()).
+    speechInputService.requestMicPermission();
     render();
   }
 
@@ -123,6 +143,7 @@ export function mount(container) {
     }
     activeListen?.stop();
     activeListen = null;
+    tapPaused = false;
     phase = 'select';
     render();
   }
@@ -141,6 +162,7 @@ export function mount(container) {
     }
     if (interactionMode === 'tap') {
       tapRevealed = false;
+      tapPaused = false;
       render();
       clearRevealTimer();
       clearPrimarySpeechTimer();
@@ -186,10 +208,93 @@ export function mount(container) {
     render();
     const items = [{ text: secondaryText(card), lang: answerLang() }];
     if (card.example) items.push({ text: card.example, lang: 'en' });
-    ttsService.speakSequence(items, () => autoAdvanceTap(card));
+    ttsService.speakSequence(items, () => afterTranslationSpoken(card));
     // Backstop in case none of the onend callbacks fire (speech silently dropped).
     if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
-    autoAdvanceTimer = setTimeout(() => autoAdvanceTap(card), TAP_AUTO_ADVANCE_BACKSTOP_MS);
+    autoAdvanceTimer = setTimeout(() => afterTranslationSpoken(card), TAP_AUTO_ADVANCE_BACKSTOP_MS);
+  }
+
+  /**
+   * Runs once the translation (+ example) has finished being spoken, or the
+   * backstop above fired instead. Gives a short pause (STOP_LISTEN_WINDOW_MS)
+   * before auto-advancing — during which a spoken "Stop" pauses the advance
+   * until "Weiter" is heard (or a rate button is tapped, always available as
+   * a manual override). Falls back to a plain timed pause with no listening
+   * if speech recognition isn't supported (e.g. the installed home-screen
+   * PWA — see speechInputService's module doc).
+   */
+  function afterTranslationSpoken(card) {
+    if (currentCard() !== card) return;
+    if (autoAdvanceTimer) {
+      clearTimeout(autoAdvanceTimer);
+      autoAdvanceTimer = null;
+    }
+    if (!speechInputService.isSupported()) {
+      autoAdvanceTimer = setTimeout(() => autoAdvanceTap(card), STOP_LISTEN_WINDOW_MS);
+      return;
+    }
+    activeListen = speechInputService.listen({
+      lang: 'de-DE', // "Stop"/"Weiter" are said in German regardless of card direction
+      timeoutMs: STOP_LISTEN_WINDOW_MS,
+      onResult: (transcripts) => {
+        activeListen = null;
+        if (currentCard() !== card) return;
+        if (matchesCommand(transcripts, STOP_WORDS)) {
+          enterPaused(card);
+        } else {
+          autoAdvanceTap(card);
+        }
+      },
+      onTimeout: () => {
+        activeListen = null;
+        autoAdvanceTap(card);
+      },
+      onError: () => {
+        activeListen = null;
+        autoAdvanceTap(card); // best-effort — just proceed as if nothing was heard
+      }
+    });
+  }
+
+  function enterPaused(card) {
+    if (currentCard() !== card) return;
+    tapPaused = true;
+    render();
+    listenForResume(card);
+  }
+
+  /** Re-arms listening in a loop (a single listen() call times out after LISTEN_TIMEOUT_MS) until "Weiter" is heard or the pause is left some other way. */
+  function listenForResume(card) {
+    if (currentCard() !== card || !tapPaused) return;
+    activeListen = speechInputService.listen({
+      lang: 'de-DE',
+      timeoutMs: LISTEN_TIMEOUT_MS,
+      onResult: (transcripts) => {
+        activeListen = null;
+        if (currentCard() !== card || !tapPaused) return;
+        if (matchesCommand(transcripts, RESUME_WORDS)) {
+          resumeFromPause(card);
+        } else {
+          listenForResume(card); // not "Weiter" — keep listening
+        }
+      },
+      onTimeout: () => {
+        activeListen = null;
+        listenForResume(card); // keep listening — no time limit on the pause itself
+      },
+      onError: () => {
+        activeListen = null;
+        // Stop retrying on a real error (e.g. permission revoked) rather than
+        // looping forever — the rate buttons remain as a manual way onward.
+      }
+    });
+  }
+
+  function resumeFromPause(card) {
+    if (currentCard() !== card) return;
+    tapPaused = false;
+    render();
+    autoAdvanceTap(card);
   }
 
   function autoAdvanceTap(card) {
@@ -296,6 +401,9 @@ export function mount(container) {
       clearTimeout(autoAdvanceTimer);
       autoAdvanceTimer = null;
     }
+    activeListen?.stop(); // manual rate overrides any pending "Stop"/"Weiter" listening
+    activeListen = null;
+    tapPaused = false;
     stats[known ? 'known' : 'unknown'] += 1;
     vocabStore.markReviewed(card.id, known);
     syncService.sync();
@@ -352,6 +460,7 @@ export function mount(container) {
         </div>
         ${voiceSupported ? '' : '<p class="hint">Spracheingabe wird von diesem Browser nicht unterstützt.</p>'}
         ${interactionMode === 'voice' ? `<p class="hint"><span class="icon-inline-wrap">${warningIcon}</span> Funktioniert nur, wenn die Seite direkt in Safari geöffnet ist (nicht das installierte Icon vom Home-Bildschirm).</p>` : ''}
+        ${interactionMode === 'tap' && voiceSupported ? `<p class="hint"><span class="icon-inline-wrap">${micIcon}</span> Nach der Lösung: Sag "Stop" zum Pausieren, "Weiter" zum Fortfahren.</p>` : ''}
 
         <p class="hint">Auto-Modus: pro Karte ein großer Tap. Kein Hinsehen nötig.</p>
         <button class="btn btn-huge mode-choice-btn btn-primary btn-with-icon" id="start-btn" ${ready ? '' : 'disabled'}>
@@ -388,6 +497,9 @@ export function mount(container) {
     const secondaryHtml = tapRevealed
       ? escapeHtml(secondaryText(card))
       : `<span class="icon-inline-wrap">${thinkingIcon}</span> Zeit zum Nachdenken …`;
+    const pausedHtml = tapPaused
+      ? `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${micIcon}</span> Pausiert – sag "Weiter" oder tippe eine Antwort.</p>`
+      : '';
     container.innerHTML = `
       <div class="audio-mode">
         ${progressBarHtml(index, queue.length)}
@@ -395,6 +507,7 @@ export function mount(container) {
           <div class="card-primary">${escapeHtml(primaryText(card))}</div>
           <div class="card-secondary ${tapRevealed ? '' : 'reveal-pending'}">${secondaryHtml}</div>
         </div>
+        ${pausedHtml}
         <button class="btn btn-secondary btn-with-icon" id="replay-btn"><span class="icon-inline-wrap">${speakerIcon}</span> Nochmal anhören</button>
         <div class="rate-buttons">
           <button class="btn btn-huge btn-danger btn-with-icon" id="unknown-btn"><span class="icon-inline-wrap icon-lg">${xCircleIcon}</span> Nochmal üben</button>

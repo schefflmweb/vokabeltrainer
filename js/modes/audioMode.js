@@ -23,7 +23,14 @@ const TAP_AUTO_ADVANCE_BACKSTOP_MS = 6000;
 const PRIMARY_SPEECH_BACKSTOP_MS = 4000;
 // Pause after the translation finishes speaking, before auto-advancing to
 // the next card — and the window in which a spoken "Stop" is listened for.
-const STOP_LISTEN_WINDOW_MS = 2000;
+// Originally 2000; on-device testing showed "Stopp" never got recognized in
+// that window at all (not even close — always "Nichts gehört"), and voice
+// mode's own answer-listening (which works) uses an 8s window — iOS's
+// recognizer needs real time just to start up before it's even capturing,
+// so 2s may have simply never left it enough room. Bumped to 4000 as a
+// compromise: still a short pause when nothing is said, but with a real
+// chance of actually hearing "Stop" if it's said promptly.
+const STOP_LISTEN_WINDOW_MS = 4000;
 const STOP_WORDS = ['stop', 'stopp'];
 const RESUME_WORDS = ['weiter'];
 // How long the "Gehört: ..." / "Nichts gehört" status stays on screen before

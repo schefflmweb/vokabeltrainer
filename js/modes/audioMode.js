@@ -26,6 +26,13 @@ const PRIMARY_SPEECH_BACKSTOP_MS = 4000;
 const STOP_LISTEN_WINDOW_MS = 2000;
 const STOP_WORDS = ['stop', 'stopp'];
 const RESUME_WORDS = ['weiter'];
+// How long the "Gehört: ..." / "Nichts gehört" status stays on screen before
+// advancing — a real (not just debug) glance-at-the-screen confirmation of
+// what the mic picked up, but also directly diagnostic: if this shows real
+// recognized words for other speech, "Stop" not registering is a wording/
+// matching issue; if it always shows "Nichts gehört", the mic likely isn't
+// capturing anything at all in this window.
+const LISTEN_RESULT_PAUSE_MS = 1200;
 
 function normalizeCommand(str) {
   return str.trim().toLowerCase().replace(/[.,!?;:]+$/g, '');
@@ -59,6 +66,9 @@ export function mount(container) {
   // True while waiting for a spoken "Weiter" after the user said "Stop"
   // during the post-translation pause — see afterTranslationSpoken().
   let tapPaused = false;
+  // Live status for the "Stop" detection window: null | 'listening' |
+  // { kind: 'heard'|'silence'|'error', text? } — see afterTranslationSpoken().
+  let tapListenState = null;
   function clearRevealTimer() {
     if (tapRevealTimer) {
       clearTimeout(tapRevealTimer);
@@ -144,6 +154,7 @@ export function mount(container) {
     activeListen?.stop();
     activeListen = null;
     tapPaused = false;
+    tapListenState = null;
     phase = 'select';
     render();
   }
@@ -163,6 +174,7 @@ export function mount(container) {
     if (interactionMode === 'tap') {
       tapRevealed = false;
       tapPaused = false;
+      tapListenState = null;
       render();
       clearRevealTimer();
       clearPrimarySpeechTimer();
@@ -238,8 +250,10 @@ export function mount(container) {
     // real microphone capture needs a *recording*-capable session, and the
     // two can starve each other. Pausing the loop while genuinely listening
     // (resumed the moment listening ends, in every branch below) avoids that
-    // conflict; see the "Stop" not being heard at all report this addressed.
+    // conflict.
     audioSessionUnlock.stop();
+    tapListenState = 'listening';
+    render();
     activeListen = speechInputService.listen({
       lang: 'de-DE', // "Stop"/"Weiter" are said in German regardless of card direction
       timeoutMs: STOP_LISTEN_WINDOW_MS,
@@ -247,21 +261,28 @@ export function mount(container) {
         activeListen = null;
         if (currentCard() !== card) { audioSessionUnlock.start(); return; }
         if (matchesCommand(transcripts, STOP_WORDS)) {
+          tapListenState = null;
           enterPaused(card); // keeps listening — audioSessionUnlock stays paused until resumed
         } else {
           audioSessionUnlock.start();
-          autoAdvanceTap(card);
+          tapListenState = { kind: 'heard', text: transcripts?.[0] || '' };
+          render();
+          autoAdvanceTimer = setTimeout(() => { tapListenState = null; autoAdvanceTap(card); }, LISTEN_RESULT_PAUSE_MS);
         }
       },
       onTimeout: () => {
         activeListen = null;
         audioSessionUnlock.start();
-        autoAdvanceTap(card);
+        tapListenState = { kind: 'silence' };
+        render();
+        autoAdvanceTimer = setTimeout(() => { tapListenState = null; autoAdvanceTap(card); }, LISTEN_RESULT_PAUSE_MS);
       },
-      onError: () => {
+      onError: (err) => {
         activeListen = null;
         audioSessionUnlock.start();
-        autoAdvanceTap(card); // best-effort — just proceed as if nothing was heard
+        tapListenState = { kind: 'error', text: err };
+        render();
+        autoAdvanceTimer = setTimeout(() => { tapListenState = null; autoAdvanceTap(card); }, LISTEN_RESULT_PAUSE_MS);
       }
     });
   }
@@ -421,6 +442,7 @@ export function mount(container) {
     activeListen = null;
     audioSessionUnlock.start(); // in case a pending listen had it paused (see afterTranslationSpoken())
     tapPaused = false;
+    tapListenState = null;
     stats[known ? 'known' : 'unknown'] += 1;
     vocabStore.markReviewed(card.id, known);
     syncService.sync();
@@ -517,6 +539,16 @@ export function mount(container) {
     const pausedHtml = tapPaused
       ? `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${micIcon}</span> Pausiert – sag "Weiter" oder tippe eine Antwort.</p>`
       : '';
+    let listenHtml = '';
+    if (tapListenState === 'listening') {
+      listenHtml = `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${micIcon}</span> Höre auf "Stop" …</p>`;
+    } else if (tapListenState?.kind === 'heard') {
+      listenHtml = `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${micIcon}</span> Gehört: "${escapeHtml(tapListenState.text) || '–'}"</p>`;
+    } else if (tapListenState?.kind === 'silence') {
+      listenHtml = `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${micIcon}</span> Nichts gehört.</p>`;
+    } else if (tapListenState?.kind === 'error') {
+      listenHtml = `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${errorIcon}</span> Mikrofon-Fehler: ${escapeHtml(tapListenState.text || '')}</p>`;
+    }
     container.innerHTML = `
       <div class="audio-mode">
         ${progressBarHtml(index, queue.length)}
@@ -525,6 +557,7 @@ export function mount(container) {
           <div class="card-secondary ${tapRevealed ? '' : 'reveal-pending'}">${secondaryHtml}</div>
         </div>
         ${pausedHtml}
+        ${listenHtml}
         <button class="btn btn-secondary btn-with-icon" id="replay-btn"><span class="icon-inline-wrap">${speakerIcon}</span> Nochmal anhören</button>
         <div class="rate-buttons">
           <button class="btn btn-huge btn-danger btn-with-icon" id="unknown-btn"><span class="icon-inline-wrap icon-lg">${xCircleIcon}</span> Nochmal üben</button>

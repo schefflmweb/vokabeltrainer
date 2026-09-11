@@ -40,6 +40,12 @@ const RESUME_WORDS = ['weiter'];
 // matching issue; if it always shows "Nichts gehört", the mic likely isn't
 // capturing anything at all in this window.
 const LISTEN_RESULT_PAUSE_MS = 1200;
+// Buffer before starting a new recognition session right after a previous
+// one just ended (entering the pause, and each re-arm of the "Weiter" loop)
+// — "Stop" working but "Weiter" not, right after, pointed at back-to-back
+// recognition starts not giving iOS enough time to release the previous
+// session first.
+const RESUME_LISTEN_RESTART_DELAY_MS = 500;
 
 function normalizeCommand(str) {
   return str.trim().toLowerCase().replace(/[.,!?;:]+$/g, '');
@@ -267,7 +273,7 @@ export function mount(container) {
     // (resumed the moment listening ends, in every branch below) avoids that
     // conflict.
     audioSessionUnlock.stop();
-    tapListenState = 'listening';
+    tapListenState = 'listening-stop';
     render();
     activeListen = speechInputService.listen({
       lang: 'de-DE', // "Stop"/"Weiter" are said in German regardless of card direction
@@ -276,7 +282,6 @@ export function mount(container) {
         activeListen = null;
         if (currentCard() !== card) { audioSessionUnlock.start(); return; }
         if (matchesCommand(transcripts, STOP_WORDS)) {
-          tapListenState = null;
           enterPaused(card); // keeps listening — audioSessionUnlock stays paused until resumed
         } else {
           audioSessionUnlock.start();
@@ -305,14 +310,22 @@ export function mount(container) {
   function enterPaused(card) {
     if (currentCard() !== card) return;
     tapPaused = true;
+    tapListenState = null;
     render();
-    listenForResume(card);
+    // A short buffer before starting the next recognition session — starting
+    // one immediately back-to-back with the "Stop" session that just ended
+    // may not give iOS enough time to tear the previous one down first.
+    setTimeout(() => {
+      if (tapPaused && currentCard() === card) listenForResume(card);
+    }, RESUME_LISTEN_RESTART_DELAY_MS);
   }
 
   /** Re-arms listening in a loop (a single listen() call times out after LISTEN_TIMEOUT_MS) until "Weiter" is heard or the pause is left some other way. */
   function listenForResume(card) {
     if (currentCard() !== card || !tapPaused) return;
     audioSessionUnlock.stop(); // see afterTranslationSpoken() — kept paused for the whole "waiting for Weiter" loop
+    tapListenState = 'listening-weiter';
+    render();
     activeListen = speechInputService.listen({
       lang: 'de-DE',
       timeoutMs: LISTEN_TIMEOUT_MS,
@@ -320,18 +333,29 @@ export function mount(container) {
         activeListen = null;
         if (currentCard() !== card || !tapPaused) { audioSessionUnlock.start(); return; }
         if (matchesCommand(transcripts, RESUME_WORDS)) {
+          tapListenState = null;
           resumeFromPause(card); // resumes audioSessionUnlock itself
         } else {
-          listenForResume(card); // not "Weiter" — keep listening
+          tapListenState = { kind: 'heard', text: transcripts?.[0] || '' };
+          render();
+          setTimeout(() => {
+            if (tapPaused && currentCard() === card) listenForResume(card); // not "Weiter" — keep listening
+          }, RESUME_LISTEN_RESTART_DELAY_MS);
         }
       },
       onTimeout: () => {
         activeListen = null;
-        listenForResume(card); // keep listening — no time limit on the pause itself
+        tapListenState = { kind: 'silence' };
+        render();
+        setTimeout(() => {
+          if (tapPaused && currentCard() === card) listenForResume(card); // keep listening — no time limit on the pause itself
+        }, RESUME_LISTEN_RESTART_DELAY_MS);
       },
-      onError: () => {
+      onError: (err) => {
         activeListen = null;
         audioSessionUnlock.start();
+        tapListenState = { kind: 'error', text: err };
+        render();
         // Stop retrying on a real error (e.g. permission revoked) rather than
         // looping forever — the rate buttons remain as a manual way onward.
       }
@@ -551,18 +575,19 @@ export function mount(container) {
     const secondaryHtml = tapRevealed
       ? escapeHtml(secondaryText(card))
       : `<span class="icon-inline-wrap">${thinkingIcon}</span> Zeit zum Nachdenken …`;
-    const pausedHtml = tapPaused
-      ? `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${micIcon}</span> Pausiert – sag "Weiter" oder tippe eine Antwort.</p>`
-      : '';
-    let listenHtml = '';
-    if (tapListenState === 'listening') {
-      listenHtml = `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${micIcon}</span> Höre auf "Stop" …</p>`;
+    let statusHtml = '';
+    if (tapListenState === 'listening-stop') {
+      statusHtml = `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${micIcon}</span> Höre auf "Stop" …</p>`;
+    } else if (tapListenState === 'listening-weiter') {
+      statusHtml = `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${micIcon}</span> Pausiert – höre auf "Weiter" …</p>`;
     } else if (tapListenState?.kind === 'heard') {
-      listenHtml = `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${micIcon}</span> Gehört: "${escapeHtml(tapListenState.text) || '–'}"</p>`;
+      statusHtml = `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${micIcon}</span> Gehört: "${escapeHtml(tapListenState.text) || '–'}"</p>`;
     } else if (tapListenState?.kind === 'silence') {
-      listenHtml = `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${micIcon}</span> Nichts gehört.</p>`;
+      statusHtml = `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${micIcon}</span> Nichts gehört.</p>`;
     } else if (tapListenState?.kind === 'error') {
-      listenHtml = `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${errorIcon}</span> Mikrofon-Fehler: ${escapeHtml(tapListenState.text || '')}</p>`;
+      statusHtml = `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${errorIcon}</span> Mikrofon-Fehler: ${escapeHtml(tapListenState.text || '')}</p>`;
+    } else if (tapPaused) {
+      statusHtml = `<p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap">${micIcon}</span> Pausiert – sag "Weiter" oder tippe eine Antwort.</p>`;
     }
     container.innerHTML = `
       <div class="audio-mode">
@@ -571,8 +596,7 @@ export function mount(container) {
           <div class="card-primary">${escapeHtml(primaryText(card))}</div>
           <div class="card-secondary ${tapRevealed ? '' : 'reveal-pending'}">${secondaryHtml}</div>
         </div>
-        ${pausedHtml}
-        ${listenHtml}
+        ${statusHtml}
         <button class="btn btn-secondary btn-with-icon" id="replay-btn"><span class="icon-inline-wrap">${speakerIcon}</span> Nochmal anhören</button>
         <div class="rate-buttons">
           <button class="btn btn-huge btn-danger btn-with-icon" id="unknown-btn"><span class="icon-inline-wrap icon-lg">${xCircleIcon}</span> Nochmal üben</button>

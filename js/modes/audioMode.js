@@ -143,6 +143,14 @@ export function mount(container) {
     if (!pendingQueue) return; // guarded by disabled button; shouldn't fire
     toneService.unlock(); // real tap — unlocks Web Audio for the rest of this session
     audioSessionUnlock.start(); // real tap — nudges iOS toward routing audio to Bluetooth (see module doc)
+    // Also request mic permission here, not just from the tap/voice toggle
+    // in setInteractionMode(): tap mode is the default, so a user who never
+    // touches that toggle would otherwise never trigger a permission prompt
+    // from a real tap at all — leaving the *first* mic access attempt to
+    // happen deep in an async chain (afterTranslationSpoken), where iOS may
+    // silently refuse to grant it. This was very likely why "Stop" was never
+    // heard regardless of how long the listen window was.
+    speechInputService.requestMicPermission();
     queue = pendingQueue;
     index = 0;
     stats = { known: 0, unknown: 0 };

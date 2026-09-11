@@ -233,24 +233,34 @@ export function mount(container) {
       autoAdvanceTimer = setTimeout(() => autoAdvanceTap(card), STOP_LISTEN_WINDOW_MS);
       return;
     }
+    // audioSessionUnlock's silent loop (see its module doc) is meant to nudge
+    // iOS toward a *playback* audio session for Bluetooth routing — but a
+    // real microphone capture needs a *recording*-capable session, and the
+    // two can starve each other. Pausing the loop while genuinely listening
+    // (resumed the moment listening ends, in every branch below) avoids that
+    // conflict; see the "Stop" not being heard at all report this addressed.
+    audioSessionUnlock.stop();
     activeListen = speechInputService.listen({
       lang: 'de-DE', // "Stop"/"Weiter" are said in German regardless of card direction
       timeoutMs: STOP_LISTEN_WINDOW_MS,
       onResult: (transcripts) => {
         activeListen = null;
-        if (currentCard() !== card) return;
+        if (currentCard() !== card) { audioSessionUnlock.start(); return; }
         if (matchesCommand(transcripts, STOP_WORDS)) {
-          enterPaused(card);
+          enterPaused(card); // keeps listening — audioSessionUnlock stays paused until resumed
         } else {
+          audioSessionUnlock.start();
           autoAdvanceTap(card);
         }
       },
       onTimeout: () => {
         activeListen = null;
+        audioSessionUnlock.start();
         autoAdvanceTap(card);
       },
       onError: () => {
         activeListen = null;
+        audioSessionUnlock.start();
         autoAdvanceTap(card); // best-effort — just proceed as if nothing was heard
       }
     });
@@ -266,14 +276,15 @@ export function mount(container) {
   /** Re-arms listening in a loop (a single listen() call times out after LISTEN_TIMEOUT_MS) until "Weiter" is heard or the pause is left some other way. */
   function listenForResume(card) {
     if (currentCard() !== card || !tapPaused) return;
+    audioSessionUnlock.stop(); // see afterTranslationSpoken() — kept paused for the whole "waiting for Weiter" loop
     activeListen = speechInputService.listen({
       lang: 'de-DE',
       timeoutMs: LISTEN_TIMEOUT_MS,
       onResult: (transcripts) => {
         activeListen = null;
-        if (currentCard() !== card || !tapPaused) return;
+        if (currentCard() !== card || !tapPaused) { audioSessionUnlock.start(); return; }
         if (matchesCommand(transcripts, RESUME_WORDS)) {
-          resumeFromPause(card);
+          resumeFromPause(card); // resumes audioSessionUnlock itself
         } else {
           listenForResume(card); // not "Weiter" — keep listening
         }
@@ -284,6 +295,7 @@ export function mount(container) {
       },
       onError: () => {
         activeListen = null;
+        audioSessionUnlock.start();
         // Stop retrying on a real error (e.g. permission revoked) rather than
         // looping forever — the rate buttons remain as a manual way onward.
       }
@@ -293,6 +305,7 @@ export function mount(container) {
   function resumeFromPause(card) {
     if (currentCard() !== card) return;
     tapPaused = false;
+    audioSessionUnlock.start();
     render();
     autoAdvanceTap(card);
   }
@@ -310,6 +323,7 @@ export function mount(container) {
     if (currentCard() !== card) return; // card changed while speech was playing
     voiceState = 'listening';
     render();
+    audioSessionUnlock.stop(); // see afterTranslationSpoken() — a competing silent playback loop can starve real mic capture
     activeListen = speechInputService.listen({
       lang: answerLang() === 'de' ? 'de-DE' : 'en-US',
       timeoutMs: LISTEN_TIMEOUT_MS,
@@ -323,6 +337,7 @@ export function mount(container) {
   function handleVoiceResult(card, transcripts) {
     if (currentCard() !== card) return;
     activeListen = null;
+    audioSessionUnlock.start();
     const expected = secondaryText(card);
     const correct = speechInputService.answersMatchAny(transcripts, expected);
     stats[correct ? 'known' : 'unknown'] += 1;
@@ -356,6 +371,7 @@ export function mount(container) {
   function handleVoiceError(card, err) {
     if (currentCard() !== card) return;
     activeListen = null;
+    audioSessionUnlock.start();
     voiceState = 'error';
     voiceErrorMessage = err === 'not-allowed'
       ? 'Mikrofon-Zugriff verweigert. Bitte in den Safari-Website-Einstellungen erlauben.'
@@ -403,6 +419,7 @@ export function mount(container) {
     }
     activeListen?.stop(); // manual rate overrides any pending "Stop"/"Weiter" listening
     activeListen = null;
+    audioSessionUnlock.start(); // in case a pending listen had it paused (see afterTranslationSpoken())
     tapPaused = false;
     stats[known ? 'known' : 'unknown'] += 1;
     vocabStore.markReviewed(card.id, known);

@@ -1,5 +1,12 @@
-import { db } from './db.js';
+import { db, STORE_NAMES } from './db.js';
 import { defaultSrs, schedule } from '../srs/scheduler.js';
+
+// How many candidate records getDue() reads via the dueDate index before
+// shuffling and slicing to the requested session size. Well above any
+// realistic session size so shuffled results stay varied, but far below the
+// full collection — with large imports (thousands of words) reading
+// everything just to pick ~15 due items made session start noticeably slow.
+const DUE_POOL_CAP = 400;
 
 let idCounter = 0;
 function makeId(en) {
@@ -49,12 +56,19 @@ export const vocabStore = {
   },
 
   async getDue(limit = 20, now = Date.now()) {
-    const all = await this.getAll();
-    const due = all.filter((v) => v.srs.dueDate <= now);
+    // Reads via the dueDate index instead of the whole store — with a large
+    // collection, loading every record just to find ~15 due ones made every
+    // session start slow.
+    let pool = (await db.queryIndex(STORE_NAMES.VOCAB, 'dueDate', IDBKeyRange.upperBound(now), DUE_POOL_CAP))
+      .filter((v) => !v.deleted);
+    if (pool.length === 0) {
+      // Nothing due -> practice from a random sample of everything, rather
+      // than loading the full collection.
+      pool = (await db.samplePool(STORE_NAMES.VOCAB, DUE_POOL_CAP)).filter((v) => !v.deleted);
+    }
     // Shuffled, not sorted by dueDate: freshly-seeded/imported words share
     // (near-)identical timestamps, so sorting left the due pool in a fixed
     // order and sessions kept showing the same first N cards every time.
-    const pool = due.length > 0 ? due : all; // nothing due -> practice from everything
     const shuffled = [...pool].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, limit);
   },

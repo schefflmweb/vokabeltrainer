@@ -82,6 +82,58 @@ export const db = {
     return wrapRequest(store.count());
   },
 
+  /** Reads up to `cap` records from `indexName` whose key falls in `range` (ascending), via a cursor — avoids deserializing the whole store just to find a handful of due items. */
+  async queryIndex(storeName, indexName, range, cap) {
+    const store = await tx(storeName, 'readonly');
+    const index = store.index(indexName);
+    return new Promise((resolve, reject) => {
+      const results = [];
+      const req = index.openCursor(range);
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (!cursor || results.length >= cap) {
+          resolve(results);
+          return;
+        }
+        results.push(cursor.value);
+        cursor.continue();
+      };
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  /** Reads up to `cap` records starting at a random position in the store — a cheap-ish way to get a representative sample without loading everything. */
+  async samplePool(storeName, cap) {
+    const total = await this.count(storeName);
+    const store = await tx(storeName, 'readonly');
+    return new Promise((resolve, reject) => {
+      const results = [];
+      const maxStart = Math.max(0, total - cap);
+      const start = maxStart > 0 ? Math.floor(Math.random() * maxStart) : 0;
+      let advanced = start === 0;
+      const req = store.openCursor();
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (!cursor) {
+          resolve(results);
+          return;
+        }
+        if (!advanced) {
+          advanced = true;
+          cursor.advance(start);
+          return;
+        }
+        if (results.length >= cap) {
+          resolve(results);
+          return;
+        }
+        results.push(cursor.value);
+        cursor.continue();
+      };
+      req.onerror = () => reject(req.error);
+    });
+  },
+
   async getMeta(key) {
     const record = await this.get(key, STORE_META);
     return record ? record.value : undefined;

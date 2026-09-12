@@ -91,9 +91,12 @@ export function mount(container) {
   function bindRowActions(scopeEl) {
     scopeEl.querySelectorAll('.delete-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        await vocabStore.remove(btn.dataset.id);
+        const id = btn.dataset.id;
+        await vocabStore.remove(id);
         syncService.sync();
-        render();
+        vocabCache = vocabCache.filter((v) => v.id !== id);
+        updateStatsUI();
+        updateVocabListOnly();
       });
     });
 
@@ -116,10 +119,13 @@ export function mount(container) {
         e.preventDefault();
         const data = Object.fromEntries(new FormData(form).entries());
         if (!data.en.trim() || !data.de.trim()) return;
-        await vocabStore.update(form.dataset.id, data);
+        const updated = await vocabStore.update(form.dataset.id, data);
         syncService.sync();
+        const idx = vocabCache.findIndex((v) => v.id === updated.id);
+        if (idx !== -1) vocabCache[idx] = updated;
         editingId = null;
-        render();
+        updateStatsUI();
+        updateVocabListOnly();
       });
     });
 
@@ -172,11 +178,26 @@ export function mount(container) {
     URL.revokeObjectURL(url);
   }
 
+  /** Recomputes the stat tiles from the in-memory vocabCache — no DB read, so it's cheap to call after every local edit. */
+  async function updateStatsUI() {
+    if (!container.querySelector('.manage-mode')) return; // Verwalten isn't the visible screen anymore.
+    const now = Date.now();
+    const dueToday = vocabCache.filter((v) => v.srs.dueDate <= now).length;
+    const learned = vocabCache.filter((v) => v.srs.repetitions >= 2).length;
+    const streak = await vocabStore.getStreak();
+    const statTiles = container.querySelectorAll('.stat-value');
+    if (statTiles[0]) statTiles[0].textContent = vocabCache.length;
+    if (statTiles[1]) statTiles[1].textContent = dueToday;
+    if (statTiles[2]) statTiles[2].textContent = learned;
+    if (statTiles[3]) statTiles[3].innerHTML = `<span class="icon-inline-wrap">${flameIcon}</span> ${streak.count}`;
+  }
+
   /**
    * Re-reads counts/lists after a sync pulls in changes from another device
    * (a CSV imported there, progress reviewed there, ...) — without a full
-   * render(), which would disrupt an in-progress edit or search. Updates
-   * only the DOM bits that show counts, same spirit as updateVocabListOnly().
+   * render(), which would disrupt an in-progress edit or search. This is the
+   * one path that must re-fetch from IndexedDB, since remote changes aren't
+   * reflected in the in-memory vocabCache yet.
    */
   async function refreshAfterSync() {
     if (!container.querySelector('.manage-mode')) return; // Verwalten isn't the visible screen anymore.
@@ -189,18 +210,15 @@ export function mount(container) {
     const grammarCountEl = container.querySelector('#grammar-count');
     if (grammarCountEl) grammarCountEl.textContent = grammarCount;
 
-    const now = Date.now();
-    const dueToday = vocabCache.filter((v) => v.srs.dueDate <= now).length;
-    const learned = vocabCache.filter((v) => v.srs.repetitions >= 2).length;
-    const streak = await vocabStore.getStreak();
-    const statTiles = container.querySelectorAll('.stat-value');
-    if (statTiles[0]) statTiles[0].textContent = vocabCache.length;
-    if (statTiles[1]) statTiles[1].textContent = dueToday;
-    if (statTiles[2]) statTiles[2].textContent = learned;
-    if (statTiles[3]) statTiles[3].innerHTML = `<span class="icon-inline-wrap">${flameIcon}</span> ${streak.count}`;
+    await updateStatsUI();
   }
 
   async function render() {
+    // Loading a large collection can take a moment — show something
+    // immediately instead of leaving the screen blank while it loads.
+    if (!container.querySelector('.manage-mode')) {
+      container.innerHTML = `<div class="manage-mode pad"><p class="hint">Lädt …</p></div>`;
+    }
     vocabCache = await vocabStore.getAll();
     const filtered = filterVocab(vocabCache, searchQuery);
     const grammarAll = await grammarStore.getAll();
@@ -294,9 +312,13 @@ export function mount(container) {
       const form = e.target;
       const data = Object.fromEntries(new FormData(form).entries());
       if (!data.en.trim() || !data.de.trim()) return;
-      await vocabStore.add(data);
+      const record = await vocabStore.add(data);
       syncService.sync();
-      render();
+      form.reset();
+      const idx = vocabCache.findIndex((v) => v.id === record.id);
+      if (idx !== -1) vocabCache[idx] = record; else vocabCache.push(record);
+      updateStatsUI();
+      updateVocabListOnly();
     });
 
     bindRowActions(container.querySelector('#vocab-list-container'));
@@ -310,7 +332,9 @@ export function mount(container) {
       if (!confirm(`Wirklich alle ${count} Vokabeln und deinen Lernfortschritt unwiderruflich löschen?`)) return;
       await vocabStore.removeAll();
       syncService.sync();
+      vocabCache = [];
       searchQuery = '';
+      visibleCount = VOCAB_PAGE_SIZE;
       render();
     });
 
@@ -330,10 +354,15 @@ export function mount(container) {
       }
       const { added, updated } = await vocabStore.addMany(entries);
       syncService.sync();
+      const changedIds = new Set([...added, ...updated].map((v) => v.id));
+      vocabCache = vocabCache.filter((v) => !changedIds.has(v.id)).concat(added, updated);
       csvStatusMessage = updated.length > 0
         ? `${added.length} neu hinzugefügt, ${updated.length} bereits vorhandene aktualisiert.`
         : `${added.length} Vokabeln importiert.`;
-      render();
+      container.querySelector('#csv-status').textContent = csvStatusMessage;
+      container.querySelector('#csv-text').value = '';
+      updateStatsUI();
+      updateVocabListOnly();
     });
 
     container.querySelector('#grammar-csv-file').addEventListener('change', async (e) => {

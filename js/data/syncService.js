@@ -158,13 +158,19 @@ function partFileRegex(baseFileName) {
   return new RegExp(`^${escaped}(?:\\.part(\\d+))?\\.json$`);
 }
 
+const utf8Encoder = new TextEncoder();
+/** Actual UTF-8 byte length — JS string .length counts UTF-16 code units, which undercounts anything outside plain ASCII (ä/ö/ü/ß and friends all encode to 2+ bytes in UTF-8), so it understated real file size for German text and let chunks quietly grow past GitHub's real truncation threshold. */
+function utf8ByteLength(str) {
+  return utf8Encoder.encode(str).length;
+}
+
 /** Splits `records` into chunks that each stay under MAX_FILE_BYTES once JSON-serialized — always at least one chunk, even if empty, so the base file always exists. */
 function chunkRecords(records) {
   const chunks = [];
   let current = [];
   let currentSize = 2; // "[" + "]"
   for (const record of records) {
-    const size = JSON.stringify(record).length + 1; // + comma/separator
+    const size = utf8ByteLength(JSON.stringify(record)) + 1; // + comma/separator
     if (current.length > 0 && currentSize + size > MAX_FILE_BYTES) {
       chunks.push(current);
       current = [];
@@ -177,20 +183,31 @@ function chunkRecords(records) {
   return chunks;
 }
 
-/** Gathers every part file belonging to this collection (base + any .partN) and concatenates their records — null if the collection has no files at all yet (a brand-new gist). */
+/**
+ * Gathers every part file belonging to this collection (base + any .partN)
+ * and concatenates their records — null if the collection has no files at
+ * all yet (a brand-new gist). Throws rather than silently treating a
+ * truncated file as empty: doing that used to make a sync push the
+ * (incomplete) local copy over the real remote data, silently losing
+ * whatever only existed remotely — a truncated file now stops the sync
+ * instead, since chunking should prevent this outright going forward.
+ */
 function collectRemoteRecords(files, baseFileName, field) {
   const re = partFileRegex(baseFileName);
   const parts = [];
   for (const [name, file] of Object.entries(files)) {
     const m = name.match(re);
     if (!m) continue;
-    parts.push({ index: m[1] ? parseInt(m[1], 10) : 0, file });
+    parts.push({ index: m[1] ? parseInt(m[1], 10) : 0, name, file });
   }
   if (parts.length === 0) return null;
   parts.sort((a, b) => a.index - b.index);
   const records = [];
-  for (const { file } of parts) {
-    if (!file?.content) continue; // a legacy oversized file from before this chunking existed — skip; the merge below treats it as "nothing new from remote" and re-uploads the local copy in proper chunked form.
+  for (const { name, file } of parts) {
+    if (file?.truncated) {
+      throw new Error(`GitHub hat "${name}" beim Lesen gekürzt — Sync abgebrochen, um keine Daten zu verlieren. Vermutlich eine Datei von vor diesem Fix. Bitte auf dem Gerät mit den vollständigen Daten erneut synchronisieren; hilft das nicht, den Gist "Vokabeltrainer-Daten" auf gist.github.com löschen (die App legt beim nächsten Sync automatisch einen neuen an).`);
+    }
+    if (!file?.content) continue;
     try {
       const body = JSON.parse(file.content);
       records.push(...(body[field] || []));

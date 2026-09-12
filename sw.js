@@ -1,10 +1,11 @@
-const CACHE_VERSION = 'vokabeltrainer-v7';
+const CACHE_VERSION = 'vokabeltrainer-v8';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
   './css/styles.css',
   './js/app.js',
+  './js/version.js',
   './js/data/db.js',
   './js/data/vocabStore.js',
   './js/data/grammarStore.js',

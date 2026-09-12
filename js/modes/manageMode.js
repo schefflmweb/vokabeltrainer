@@ -5,6 +5,7 @@ import { githubAuth } from '../auth/githubAuth.js';
 import { syncService } from '../data/syncService.js';
 import { ttsService } from '../tts/ttsService.js';
 import { trashIcon, searchIcon, editIcon, checkCircleIcon, xCircleIcon, downloadIcon, chartIcon, flameIcon, speakerIcon, bookIcon } from '../ui/icons.js';
+import { APP_VERSION } from '../version.js';
 
 const VOICE_SAMPLES = { en: 'This is what I sound like.', de: 'So höre ich mich an.' };
 
@@ -311,6 +312,8 @@ export function mount(container) {
           <button class="btn btn-secondary btn-with-icon" id="grammar-csv-export-btn"><span class="icon-inline-wrap">${downloadIcon}</span> Als CSV exportieren</button>
           <button class="btn btn-danger btn-with-icon" id="grammar-delete-all-btn"><span class="icon-inline-wrap">${trashIcon}</span> Alle Grammatikübungen löschen</button>
         </section>
+
+        <p class="hint center-text app-version">App-Version ${APP_VERSION}</p>
       </div>`;
 
     container.querySelector('#add-form').addEventListener('submit', async (e) => {
@@ -421,6 +424,7 @@ export function mount(container) {
       <h3>Sync über GitHub</h3>
       ${connected
         ? `<p class="hint" id="sync-status-text">–</p>
+           <p class="hint" id="sync-counts-text"></p>
            <button class="btn btn-secondary" id="disconnect-btn">Trennen</button>
            <button class="btn btn-secondary" id="sync-now-btn">Jetzt synchronisieren</button>`
         : `<p class="hint">Vokabeln zwischen Geräten abgleichen — <a href="${tokenUrl}" target="_blank" rel="noopener">Token erstellen</a> (nur Berechtigung <code>gist</code> nötig) und hier einfügen.</p>
@@ -459,6 +463,12 @@ export function mount(container) {
     unsubscribeStatus = syncService.onStatusChange((status) => {
       const el = container.querySelector('#sync-status-text');
       if (el) el.textContent = status.message;
+      const countsEl = container.querySelector('#sync-counts-text');
+      if (countsEl && status.counts) {
+        const vocabN = status.counts.vocab ?? 0;
+        const grammarN = status.counts.grammar ?? 0;
+        countsEl.textContent = `Auf GitHub: ${vocabN} Vokabeln, ${grammarN} Grammatikübungen`;
+      }
     });
   }
 

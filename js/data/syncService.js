@@ -40,6 +40,13 @@ function setStatus(next) {
   listeners.forEach((fn) => fn(status));
 }
 
+// Shows the last known state (and record counts) immediately on load,
+// before this session's own first sync has had a chance to run/complete.
+(async () => {
+  const [lastSync, counts] = await Promise.all([db.getMeta('lastSync'), db.getMeta('lastSyncCounts')]);
+  if (lastSync || counts) setStatus({ lastSync: lastSync || null, counts: counts || null });
+})();
+
 function authHeaders(token) {
   // "token <PAT>" — the classic, universally-supported scheme for personal
   // access tokens. "Bearer" is also documented for the REST API but is more
@@ -240,9 +247,14 @@ export const syncService = {
       const files = await fetchGistFiles(token, gistId);
 
       const pushPayload = {};
+      const counts = {};
       for (const { store, baseFileName, field } of COLLECTIONS) {
         const remoteRecords = collectRemoteRecords(files, baseFileName, field);
         const merged = await store.mergeFromRemote(remoteRecords);
+        // Tombstones (deleted: true) stay in the merged/pushed set so the
+        // deletion itself propagates, but they're not real entries — don't
+        // count them for the "how many are actually on the gist" display.
+        counts[field] = merged.filter((r) => !r.deleted).length;
         const chunks = chunkRecords(merged);
         const savedAt = new Date().toISOString();
         chunks.forEach((chunk, i) => {
@@ -261,8 +273,8 @@ export const syncService = {
         await store.clearDirty(dirty.map((d) => d.id));
       }
 
-      await db.setMeta('lastSync', Date.now());
-      setStatus({ state: 'synced', message: 'Synchronisiert', lastSync: Date.now() });
+      await Promise.all([db.setMeta('lastSync', Date.now()), db.setMeta('lastSyncCounts', counts)]);
+      setStatus({ state: 'synced', message: 'Synchronisiert', lastSync: Date.now(), counts });
     } catch (err) {
       setStatus({ state: 'error', message: err.message || 'Sync-Fehler – arbeitet lokal weiter' });
     }

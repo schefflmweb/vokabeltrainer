@@ -34,9 +34,30 @@ function authHeaders(token) {
   };
 }
 
+/**
+ * A plain fetch() throwing (rather than resolving with an error status)
+ * means the request never reached a server at all — DNS/TLS/connection
+ * refused, distinct from GitHub responding with e.g. a 401. Antivirus HTTPS
+ * scanning, a browser extension, or just a cold first connection can cause
+ * exactly this kind of failure transiently, so it's retried once before
+ * giving up with a clearer explanation than the browser's generic "Failed
+ * to fetch"/"Load failed".
+ */
+async function fetchWithRetry(url, options, attempt = 1) {
+  try {
+    return await fetch(url, options);
+  } catch (err) {
+    if (attempt < 2) {
+      await new Promise((r) => setTimeout(r, 1200));
+      return fetchWithRetry(url, options, attempt + 1);
+    }
+    throw new Error('Verbindung zu GitHub nicht möglich — evtl. blockiert ein Antivirus-Programm, eine Browser-Erweiterung oder eine Firewall den Zugriff auf api.github.com. Bitte kurz erneut versuchen.');
+  }
+}
+
 /** Finds the gist created by a previous sync (on this or another device with the same token) rather than creating a duplicate every time localStorage doesn't already have the id cached. */
 async function findExistingGistId(token) {
-  const res = await fetch(`${API_BASE}/gists?per_page=100`, { headers: authHeaders(token) });
+  const res = await fetchWithRetry(`${API_BASE}/gists?per_page=100`, { headers: authHeaders(token) });
   if (!res.ok) throw new Error(`GitHub-Abruf fehlgeschlagen (${res.status})`);
   const gists = await res.json();
   const match = gists.find((g) => g.description === GIST_DESCRIPTION);
@@ -50,7 +71,7 @@ async function createGist(token) {
       { content: JSON.stringify({ [field]: [], savedAt: new Date().toISOString() }) }
     ])
   );
-  const res = await fetch(`${API_BASE}/gists`, {
+  const res = await fetchWithRetry(`${API_BASE}/gists`, {
     method: 'POST',
     headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
     body: JSON.stringify({ description: GIST_DESCRIPTION, public: false, files })
@@ -71,7 +92,7 @@ async function resolveGistId(token) {
 
 /** Files over ~1MB come back with `content` omitted and `truncated: true` — the vocab file alone exceeds that once a large CSV has been imported, so those need a second fetch against raw_url. */
 async function fetchGistFiles(token, gistId) {
-  const res = await fetch(`${API_BASE}/gists/${gistId}`, { headers: authHeaders(token) });
+  const res = await fetchWithRetry(`${API_BASE}/gists/${gistId}`, { headers: authHeaders(token) });
   if (res.status === 404) {
     // The cached gist id no longer exists (deleted on github.com, say) — drop it so the next sync creates/finds a fresh one instead of failing forever.
     await githubAuth.setGistId('');
@@ -82,7 +103,7 @@ async function fetchGistFiles(token, gistId) {
   const files = gist.files || {};
   await Promise.all(Object.values(files).map(async (file) => {
     if (file.truncated && file.raw_url) {
-      const rawRes = await fetch(file.raw_url, { headers: authHeaders(token) });
+      const rawRes = await fetchWithRetry(file.raw_url, { headers: authHeaders(token) });
       if (rawRes.ok) file.content = await rawRes.text();
     }
   }));
@@ -90,7 +111,7 @@ async function fetchGistFiles(token, gistId) {
 }
 
 async function pushGistFiles(token, gistId, filesPayload) {
-  const res = await fetch(`${API_BASE}/gists/${gistId}`, {
+  const res = await fetchWithRetry(`${API_BASE}/gists/${gistId}`, {
     method: 'PATCH',
     headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
     body: JSON.stringify({ files: filesPayload })

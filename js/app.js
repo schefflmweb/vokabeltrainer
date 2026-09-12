@@ -29,6 +29,20 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('online', () => syncService.sync());
 
 if ('serviceWorker' in navigator) {
+  // sw.js caches files stale-while-revalidate (serve the cached copy
+  // immediately, refresh it in the background for next time) — good for
+  // instant loads, but it means a page left open, or just reopened without
+  // a full reload, can end up running a mix of old and newly-deployed files
+  // rather than one consistent version, until it happens to reload. Once a
+  // new service worker actually takes over (which only happens when sw.js
+  // itself changed, e.g. a CACHE_VERSION bump), force a one-time reload so
+  // every file comes from that new version together.
+  let reloadedForNewWorker = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloadedForNewWorker) return;
+    reloadedForNewWorker = true;
+    location.reload();
+  });
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   });

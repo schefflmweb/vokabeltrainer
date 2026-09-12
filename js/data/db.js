@@ -82,16 +82,37 @@ export const db = {
     return wrapRequest(store.count());
   },
 
-  /** Reads up to `cap` records from `indexName` whose key falls in `range` (ascending), via a cursor — avoids deserializing the whole store just to find a handful of due items. */
+  /**
+   * Reads up to `cap` records from `indexName` whose key falls in `range`,
+   * starting at a random position within that range — avoids deserializing
+   * the whole store just to find a handful of due items, while still
+   * varying which ones come back. A plain from-the-start cursor would
+   * always return the same records first on ties (e.g. right after a bulk
+   * import, where thousands of rows share the same dueDate and IndexedDB
+   * breaks the tie by primary key, i.e. always the same order).
+   */
   async queryIndex(storeName, indexName, range, cap) {
     const store = await tx(storeName, 'readonly');
     const index = store.index(indexName);
+    const total = await wrapRequest(index.count(range));
     return new Promise((resolve, reject) => {
       const results = [];
+      const maxStart = Math.max(0, total - cap);
+      const start = maxStart > 0 ? Math.floor(Math.random() * maxStart) : 0;
+      let advanced = start === 0;
       const req = index.openCursor(range);
       req.onsuccess = () => {
         const cursor = req.result;
-        if (!cursor || results.length >= cap) {
+        if (!cursor) {
+          resolve(results);
+          return;
+        }
+        if (!advanced) {
+          advanced = true;
+          cursor.advance(start);
+          return;
+        }
+        if (results.length >= cap) {
           resolve(results);
           return;
         }

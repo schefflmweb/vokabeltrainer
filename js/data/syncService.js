@@ -38,24 +38,26 @@ function authHeaders(token) {
   };
 }
 
+const NETWORK_RETRY_DELAYS_MS = [800, 1600, 3200];
+
 /**
  * A plain fetch() throwing (rather than resolving with an error status)
  * means the request never reached a server at all — DNS/TLS/connection
- * refused, distinct from GitHub responding with e.g. a 401. Antivirus HTTPS
- * scanning, a browser extension, or just a cold first connection can cause
- * exactly this kind of failure transiently, so it's retried once before
- * giving up with a clearer explanation than the browser's generic "Failed
- * to fetch"/"Load failed".
+ * refused, distinct from GitHub responding with e.g. a 401. Antivirus/
+ * firewall HTTPS scanning (which intercepts the connection to inspect it)
+ * is a common, well-documented cause of exactly this kind of *intermittent*
+ * failure — some requests get through, some don't — so this retries a few
+ * times with increasing delay before giving up, rather than once.
  */
-async function fetchWithRetry(url, options, attempt = 1) {
+async function fetchWithRetry(url, options, attempt = 0) {
   try {
     return await fetch(url, options);
   } catch (err) {
-    if (attempt < 2) {
-      await new Promise((r) => setTimeout(r, 1200));
+    if (attempt < NETWORK_RETRY_DELAYS_MS.length) {
+      await new Promise((r) => setTimeout(r, NETWORK_RETRY_DELAYS_MS[attempt]));
       return fetchWithRetry(url, options, attempt + 1);
     }
-    throw new Error('Verbindung zu GitHub nicht möglich — evtl. blockiert ein Antivirus-Programm, eine Browser-Erweiterung oder eine Firewall den Zugriff auf api.github.com. Bitte kurz erneut versuchen.');
+    throw new Error('Verbindung zu GitHub nicht möglich — evtl. blockiert ein Antivirus-Programm (HTTPS-Scan), eine Browser-Erweiterung oder eine Firewall den Zugriff auf api.github.com. Bitte kurz erneut versuchen.');
   }
 }
 

@@ -12,6 +12,9 @@ const SESSION_SIZE = 15;
 const REVEAL_DELAY_MS = 3000;
 const PRIMARY_SPEECH_BACKSTOP_MS = 4000;
 const TRANSLATION_SPEECH_BACKSTOP_MS = 6000;
+// Pause after the translation finishes speaking, before auto-advancing to
+// the next card — the only window during which the rate buttons are active.
+const STOP_WINDOW_MS = 2500;
 
 function shuffle(arr) {
   return [...arr].sort(() => Math.random() - 0.5);
@@ -33,6 +36,10 @@ export function mount(container) {
   let rtPrimarySpeechTimer = null;
   let rtAutoAdvanceTimer = null;
   let rtPendingAdvance = false; // guards against double-advance (auto path + manual rate tap racing)
+  // True only during the post-translation pause (STOP_WINDOW_MS) — the rate
+  // buttons are disabled the rest of the time (primary word speaking,
+  // thinking pause, translation speaking).
+  let rtButtonsActive = false;
   function clearRtTimers() {
     if (rtRevealTimer) { clearTimeout(rtRevealTimer); rtRevealTimer = null; }
     if (rtPrimarySpeechTimer) { clearTimeout(rtPrimarySpeechTimer); rtPrimarySpeechTimer = null; }
@@ -111,6 +118,7 @@ export function mount(container) {
 
   function backToSelect() {
     clearRtTimers();
+    rtButtonsActive = false;
     phase = 'select';
     render();
   }
@@ -279,6 +287,7 @@ export function mount(container) {
   /** Called synchronously from a tap (start / next-card) — speaks the prompt word, then (after a thinking pause) the translation, then auto-advances. */
   function enterReadThink(card) {
     rtPendingAdvance = false;
+    rtButtonsActive = false;
     clearRtTimers();
     rtRevealed = false;
     render();
@@ -304,8 +313,8 @@ export function mount(container) {
    * which iOS Safari's autoplay policy can silently drop — best-effort only.
    * The translation is always shown as text regardless, and "Nochmal
    * anhören" lets the user trigger it manually (a real tap) if the
-   * auto-speak didn't play. Once it finishes, the card auto-advances
-   * (counted as "kannte ich") unless the user already tapped a rate button.
+   * auto-speak didn't play. Once it finishes, the post-translation pause
+   * (enterReadThinkStopWindow) begins.
    */
   function revealReadThink(card) {
     if (currentCard() !== card) return;
@@ -313,10 +322,33 @@ export function mount(container) {
     render();
     const items = [{ text: answerText(card), lang: answerLang() }];
     if (card.example) items.push({ text: card.example, lang: 'en' });
-    ttsService.speakSequence(items, () => autoAdvanceReadThink(card));
+    let windowEntered = false;
+    const enterWindowOnce = () => {
+      if (windowEntered) return;
+      windowEntered = true;
+      if (rtAutoAdvanceTimer) {
+        clearTimeout(rtAutoAdvanceTimer);
+        rtAutoAdvanceTimer = null;
+      }
+      enterReadThinkStopWindow(card);
+    };
+    ttsService.speakSequence(items, enterWindowOnce);
     // Backstop in case none of the onend callbacks fire (speech silently dropped).
     if (rtAutoAdvanceTimer) clearTimeout(rtAutoAdvanceTimer);
-    rtAutoAdvanceTimer = setTimeout(() => autoAdvanceReadThink(card), TRANSLATION_SPEECH_BACKSTOP_MS);
+    rtAutoAdvanceTimer = setTimeout(enterWindowOnce, TRANSLATION_SPEECH_BACKSTOP_MS);
+  }
+
+  /**
+   * The only window during which "Nochmal üben"/"Kannte ich" are active.
+   * Tapping either during it rates the card immediately (and advances);
+   * letting it run out counts the card as "kannte ich" automatically,
+   * matching Auto mode's same default for an unrated card.
+   */
+  function enterReadThinkStopWindow(card) {
+    if (currentCard() !== card) return;
+    rtButtonsActive = true;
+    render();
+    rtAutoAdvanceTimer = setTimeout(() => autoAdvanceReadThink(card), STOP_WINDOW_MS);
   }
 
   function autoAdvanceReadThink(card) {
@@ -325,7 +357,7 @@ export function mount(container) {
       clearTimeout(rtAutoAdvanceTimer);
       rtAutoAdvanceTimer = null;
     }
-    rateReadThink(true); // no explicit tap -> counts as "kannte ich" per Auto mode's same choice
+    rateReadThink(true); // window ran out without a tap -> counts as "kannte ich" per Auto mode's same choice
   }
 
   function rateReadThink(known) {
@@ -361,6 +393,7 @@ export function mount(container) {
     const secondaryHtml = rtRevealed
       ? escapeHtml(answerText(card))
       : `<span class="icon-inline-wrap">${thinkingIcon}</span> Zeit zum Nachdenken …`;
+    const rateDisabled = rtButtonsActive ? '' : 'disabled';
     container.innerHTML = `
       <div class="quiz-mode">
         <div class="quiz-content">
@@ -370,13 +403,13 @@ export function mount(container) {
         </div>
         <button class="btn btn-secondary btn-with-icon" id="replay-btn"><span class="icon-inline-wrap">${speakerIcon}</span> Nochmal anhören</button>
         <div class="rate-buttons">
-          <button class="btn btn-huge btn-compact btn-danger btn-with-icon" id="unknown-btn"><span class="icon-inline-wrap">${xCircleIcon}</span> Nochmal üben</button>
-          <button class="btn btn-huge btn-compact btn-success btn-with-icon" id="known-btn"><span class="icon-inline-wrap">${checkCircleIcon}</span> Kannte ich</button>
+          <button class="btn btn-huge btn-compact btn-danger btn-with-icon" id="unknown-btn" ${rateDisabled}><span class="icon-inline-wrap">${xCircleIcon}</span> Nochmal üben</button>
+          <button class="btn btn-huge btn-compact btn-success btn-with-icon" id="known-btn" ${rateDisabled}><span class="icon-inline-wrap">${checkCircleIcon}</span> Kannte ich</button>
         </div>
       </div>`;
     container.querySelector('#replay-btn').addEventListener('click', replayReadThink);
-    container.querySelector('#unknown-btn').addEventListener('click', () => rateReadThink(false));
-    container.querySelector('#known-btn').addEventListener('click', () => rateReadThink(true));
+    container.querySelector('#unknown-btn').addEventListener('click', () => { if (rtButtonsActive) rateReadThink(false); });
+    container.querySelector('#known-btn').addEventListener('click', () => { if (rtButtonsActive) rateReadThink(true); });
   }
 
   prefetchQueue();

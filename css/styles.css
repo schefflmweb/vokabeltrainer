@@ -321,7 +321,7 @@ body {
   color: var(--text);
 }
 
-/* Quiz's "Vorlesen & Nachdenken" translation display — same reveal-pending
+/* Quiz's "Zuhören" translation display — same reveal-pending
    pattern as Auto mode's .card-secondary, sized to match Quiz's more
    compact typography instead of Auto's driving-sized text. */
 .quiz-secondary {
@@ -490,7 +490,7 @@ body {
   flex: 1;
 }
 
-/* Quiz's "Vorlesen & Nachdenken" reuses .rate-buttons, but Quiz's screens
+/* Quiz's "Zuhören" reuses .rate-buttons, but Quiz's screens
    aren't stretched edge-to-edge the way Audio mode's are — flex:1 there
    just grows the row to fill whatever empty space is left below it,
    ballooning the buttons' height. Keep the row (and its buttons) their

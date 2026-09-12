@@ -397,7 +397,7 @@ export function mount(container) {
 
         <p class="hint">Eingabeart</p>
         <div class="direction-toggle">
-          <button class="btn toggle-btn ${interactionMode === 'tap' ? 'active' : ''}" id="mode-tap"><span class="icon-inline-wrap">${tapIcon}</span> Vorlesen & Nachdenken</button>
+          <button class="btn toggle-btn ${interactionMode === 'tap' ? 'active' : ''}" id="mode-tap"><span class="icon-inline-wrap">${tapIcon}</span> Zuhören</button>
           <button class="btn toggle-btn ${interactionMode === 'voice' ? 'active' : ''}" id="mode-voice" ${voiceSupported ? '' : 'disabled'}><span class="icon-inline-wrap">${micIcon}</span> Sprechen</button>
         </div>
         ${voiceSupported ? '' : '<p class="hint">Spracheingabe wird von diesem Browser nicht unterstützt.</p>'}

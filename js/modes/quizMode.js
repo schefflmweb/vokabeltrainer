@@ -7,8 +7,8 @@ import { checklistIcon, keyboardIcon, speakerIcon, thinkingIcon, starIcon, refre
 import { answersMatch } from '../util/answerMatch.js';
 
 const SESSION_SIZE = 15;
-// Vorlesen & Nachdenken timing — same values/reasoning as Auto mode's
-// "Vorlesen & Nachdenken", copied here as a third Quiz practice type.
+// "Zuhören" timing — same values/reasoning as Auto mode's "Zuhören",
+// copied here as a third Quiz practice type.
 const REVEAL_DELAY_MS = 3000;
 const PRIMARY_SPEECH_BACKSTOP_MS = 4000;
 const TRANSLATION_SPEECH_BACKSTOP_MS = 6000;
@@ -27,7 +27,7 @@ export function mount(container) {
   let direction = 'en-de'; // 'en-de' | 'de-en'
   let answered = false;
 
-  // Vorlesen & Nachdenken per-card state (mirrors Auto mode's tap flow).
+  // "Zuhören" per-card state (mirrors Auto mode's tap flow).
   let rtRevealed = false;
   let rtRevealTimer = null;
   let rtPrimarySpeechTimer = null;
@@ -40,7 +40,7 @@ export function mount(container) {
   }
 
   // iOS Safari only allows speechSynthesis.speak() when called synchronously
-  // inside a real tap — so (for Vorlesen & Nachdenken specifically) the next
+  // inside a real tap — so (for "Zuhören" specifically) the next
   // round's due-list is fetched ahead of time, and starting/continuing a
   // round never awaits anything before it calls speakOnce()/speakSequence().
   let pendingQueue = null;
@@ -157,7 +157,7 @@ export function mount(container) {
         </button>
         <button class="btn btn-huge mode-choice-btn btn-secondary btn-with-icon" id="start-readthink" ${rtReady ? '' : 'disabled'}>
           <span class="icon-inline-wrap icon-lg">${speakerIcon}</span>
-          <span>Vorlesen &amp; Nachdenken<span class="hint">${rtReady ? 'Anhören, dann bewerten' : 'Lädt …'}</span></span>
+          <span>Zuhören<span class="hint">${rtReady ? 'Anhören, dann bewerten' : 'Lädt …'}</span></span>
         </button>
       </div>`;
     container.querySelector('#dir-en-de').addEventListener('click', () => setDirection('en-de'));
@@ -299,7 +299,7 @@ export function mount(container) {
   }
 
   /**
-   * Fires ~3s after a Vorlesen & Nachdenken card starts. This speak call is
+   * Fires ~3s after a "Zuhören" card starts. This speak call is
    * NOT triggered synchronously from a tap (it's a setTimeout callback),
    * which iOS Safari's autoplay policy can silently drop — best-effort only.
    * The translation is always shown as text regardless, and "Nochmal

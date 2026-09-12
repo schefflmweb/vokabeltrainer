@@ -108,7 +108,7 @@ export function mount(container) {
       return;
     }
 
-    allVocab = await vocabStore.getAll();
+    allVocab = await vocabStore.getSample(150); // enough variety for multiple-choice distractors without loading the whole collection
     queue = await vocabStore.getDue(SESSION_SIZE);
     index = 0;
     phase = queue.length > 0 ? 'active' : 'finished';

@@ -55,6 +55,12 @@ export const vocabStore = {
     return db.get(id);
   },
 
+  /** A random subset, for callers that just need "a bunch of other words" (e.g. multiple-choice distractors) without loading the whole collection. */
+  async getSample(cap = 150) {
+    const pool = await db.samplePool(STORE_NAMES.VOCAB, cap);
+    return pool.filter((v) => !v.deleted);
+  },
+
   async getDue(limit = 20, now = Date.now()) {
     // Reads via the dueDate index instead of the whole store — with a large
     // collection, loading every record just to find ~15 due ones made every

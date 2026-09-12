@@ -9,10 +9,24 @@ const API_BASE = 'https://api.github.com';
 // OneDrive's fixed "Apps/Vokabeltrainer" app-folder path.
 const GIST_DESCRIPTION = 'Vokabeltrainer-Daten (bitte nicht löschen)';
 
-/** Each collection is one file inside the same gist, synced together in a single pull→merge→push pass. */
+/**
+ * Gist files over ~1MB come back from the API with `content` omitted
+ * (`truncated: true`) — readable only via a separate `raw_url`, which lives
+ * on a different domain (gist.githubusercontent.com). That domain's CORS
+ * preflight response rejects the Authorization header this app needs to
+ * send for a private gist ("Response to preflight request doesn't pass
+ * access control check"), so the browser blocks that fetch outright — not
+ * fixable from this side, since it's the other server's CORS policy.
+ * Instead, each collection is split across multiple gist files, each kept
+ * safely under the threshold, so every read/write only ever talks to
+ * api.github.com, which does support this properly.
+ */
+const MAX_FILE_BYTES = 800 * 1024;
+
+/** Each collection's records are stored as `<baseFileName>.json`, `<baseFileName>.part1.json`, `<baseFileName>.part2.json`, ... as needed. */
 const COLLECTIONS = [
-  { store: vocabStore, fileName: 'vocab-data.json', field: 'vocab' },
-  { store: grammarStore, fileName: 'grammar-data.json', field: 'grammar' }
+  { store: vocabStore, baseFileName: 'vocab-data', field: 'vocab' },
+  { store: grammarStore, baseFileName: 'grammar-data', field: 'grammar' }
 ];
 
 let listeners = [];
@@ -83,8 +97,8 @@ async function findExistingGistId(token) {
 
 async function createGist(token) {
   const files = Object.fromEntries(
-    COLLECTIONS.map(({ fileName, field }) => [
-      fileName,
+    COLLECTIONS.map(({ baseFileName, field }) => [
+      partFileName(baseFileName, 0),
       { content: JSON.stringify({ [field]: [], savedAt: new Date().toISOString() }) }
     ])
   );
@@ -107,7 +121,6 @@ async function resolveGistId(token) {
   return id;
 }
 
-/** Files over ~1MB come back with `content` omitted and `truncated: true` — the vocab file alone exceeds that once a large CSV has been imported, so those need a second fetch against raw_url. */
 async function fetchGistFiles(token, gistId) {
   const res = await fetchWithRetry(`${API_BASE}/gists/${gistId}`, { headers: authHeaders(token) });
   if (res.status === 404) {
@@ -117,14 +130,7 @@ async function fetchGistFiles(token, gistId) {
   }
   if (!res.ok) throw new Error(httpErrorMessage(res, 'GitHub-Abruf fehlgeschlagen'));
   const gist = await res.json();
-  const files = gist.files || {};
-  await Promise.all(Object.values(files).map(async (file) => {
-    if (file.truncated && file.raw_url) {
-      const rawRes = await fetchWithRetry(file.raw_url, { headers: authHeaders(token) });
-      if (rawRes.ok) file.content = await rawRes.text();
-    }
-  }));
-  return files;
+  return gist.files || {};
 }
 
 async function pushGistFiles(token, gistId, filesPayload) {
@@ -136,14 +142,56 @@ async function pushGistFiles(token, gistId, filesPayload) {
   if (!res.ok) throw new Error(httpErrorMessage(res, 'GitHub-Speichern fehlgeschlagen'));
 }
 
-function parseRemoteRecords(file, field) {
-  if (!file?.content) return null;
-  try {
-    const body = JSON.parse(file.content);
-    return body[field] || [];
-  } catch {
-    return null;
+function partFileName(baseFileName, index) {
+  return index === 0 ? `${baseFileName}.json` : `${baseFileName}.part${index}.json`;
+}
+
+function partFileRegex(baseFileName) {
+  const escaped = baseFileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escaped}(?:\\.part(\\d+))?\\.json$`);
+}
+
+/** Splits `records` into chunks that each stay under MAX_FILE_BYTES once JSON-serialized — always at least one chunk, even if empty, so the base file always exists. */
+function chunkRecords(records) {
+  const chunks = [];
+  let current = [];
+  let currentSize = 2; // "[" + "]"
+  for (const record of records) {
+    const size = JSON.stringify(record).length + 1; // + comma/separator
+    if (current.length > 0 && currentSize + size > MAX_FILE_BYTES) {
+      chunks.push(current);
+      current = [];
+      currentSize = 2;
+    }
+    current.push(record);
+    currentSize += size;
   }
+  chunks.push(current);
+  return chunks;
+}
+
+/** Gathers every part file belonging to this collection (base + any .partN) and concatenates their records — null if the collection has no files at all yet (a brand-new gist). */
+function collectRemoteRecords(files, baseFileName, field) {
+  const re = partFileRegex(baseFileName);
+  const parts = [];
+  for (const [name, file] of Object.entries(files)) {
+    const m = name.match(re);
+    if (!m) continue;
+    parts.push({ index: m[1] ? parseInt(m[1], 10) : 0, file });
+  }
+  if (parts.length === 0) return null;
+  parts.sort((a, b) => a.index - b.index);
+  const records = [];
+  for (const { file } of parts) {
+    if (!file?.content) continue; // a legacy oversized file from before this chunking existed — skip; the merge below treats it as "nothing new from remote" and re-uploads the local copy in proper chunked form.
+    try {
+      const body = JSON.parse(file.content);
+      records.push(...(body[field] || []));
+    } catch {
+      // Skip an unparsable chunk rather than failing the whole sync.
+    }
+  }
+  return records;
 }
 
 export const syncService = {
@@ -192,10 +240,19 @@ export const syncService = {
       const files = await fetchGistFiles(token, gistId);
 
       const pushPayload = {};
-      for (const { store, fileName, field } of COLLECTIONS) {
-        const remoteRecords = parseRemoteRecords(files[fileName], field);
+      for (const { store, baseFileName, field } of COLLECTIONS) {
+        const remoteRecords = collectRemoteRecords(files, baseFileName, field);
         const merged = await store.mergeFromRemote(remoteRecords);
-        pushPayload[fileName] = { content: JSON.stringify({ [field]: merged, savedAt: new Date().toISOString() }) };
+        const chunks = chunkRecords(merged);
+        const savedAt = new Date().toISOString();
+        chunks.forEach((chunk, i) => {
+          pushPayload[partFileName(baseFileName, i)] = { content: JSON.stringify({ [field]: chunk, savedAt }) };
+        });
+        // Drop any leftover part files from a previous, larger sync (e.g. after "Alle löschen").
+        const re = partFileRegex(baseFileName);
+        for (const name of Object.keys(files)) {
+          if (re.test(name) && !(name in pushPayload)) pushPayload[name] = null;
+        }
       }
       await pushGistFiles(token, gistId, pushPayload);
 

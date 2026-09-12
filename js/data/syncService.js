@@ -250,6 +250,47 @@ export const syncService = {
     scheduleTimer = setTimeout(() => this.sync(), SCHEDULE_DEBOUNCE_MS);
   },
 
+  /**
+   * Deletes the remote gist (if one exists) and lets the next sync create a
+   * fresh one from scratch — the escape hatch for a gist stuck in a state
+   * no sync can read past (e.g. a truncated file from before this app
+   * version), since every sync must successfully read before it can write,
+   * so a broken remote otherwise blocks every device equally, including the
+   * one with complete, correct local data. Only ever run this on the device
+   * whose local data is actually complete/current — it becomes the new
+   * source of truth for the fresh gist.
+   */
+  async resetRemote() {
+    if (syncPromise) return syncPromise;
+    syncPromise = this._runReset().finally(() => {
+      syncPromise = null;
+    });
+    return syncPromise;
+  },
+
+  async _runReset() {
+    await githubAuth.ready();
+    const token = githubAuth.getToken();
+    if (!token) {
+      setStatus({ state: 'signed-out', message: 'Nicht verbunden – arbeitet lokal weiter' });
+      return;
+    }
+    setStatus({ state: 'syncing', message: 'Setze Sync zurück …' });
+    try {
+      let gistId = githubAuth.getGistId();
+      if (!gistId) gistId = await findExistingGistId(token);
+      if (gistId) {
+        const res = await fetchWithRetry(`${API_BASE}/gists/${gistId}`, { method: 'DELETE', headers: authHeaders(token) });
+        if (!res.ok && res.status !== 404) throw new Error(httpErrorMessage(res, 'Zurücksetzen fehlgeschlagen'));
+      }
+      await githubAuth.setGistId('');
+    } catch (err) {
+      setStatus({ state: 'error', message: err.message || 'Zurücksetzen fehlgeschlagen' });
+      return;
+    }
+    return this._runSync();
+  },
+
   async _runSync() {
     await githubAuth.ready();
     const token = githubAuth.getToken();

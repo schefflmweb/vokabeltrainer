@@ -426,7 +426,9 @@ export function mount(container) {
         ? `<p class="hint" id="sync-status-text">–</p>
            <p class="hint" id="sync-counts-text"></p>
            <button class="btn btn-secondary" id="disconnect-btn">Trennen</button>
-           <button class="btn btn-secondary" id="sync-now-btn">Jetzt synchronisieren</button>`
+           <button class="btn btn-secondary" id="sync-now-btn">Jetzt synchronisieren</button>
+           <button class="btn btn-secondary" id="reset-sync-btn">Sync zurücksetzen</button>
+           <p class="hint">"Sync zurücksetzen" nur auf dem Gerät mit den vollständigen/aktuellen Vokabeln nutzen — löscht den Cloud-Stand und lädt ihn frisch von diesem Gerät neu hoch. Für "Sync klemmt mit einer Fehlermeldung über eine gekürzte Datei".</p>`
         : `<p class="hint">Vokabeln zwischen Geräten abgleichen — <a href="${tokenUrl}" target="_blank" rel="noopener">Token erstellen</a> (nur Berechtigung <code>gist</code> nötig) und hier einfügen.</p>
            <form id="token-form" class="add-form">
              <input type="password" id="token-input" placeholder="GitHub Personal Access Token" autocomplete="off" required />
@@ -441,6 +443,10 @@ export function mount(container) {
         renderAccountBox();
       });
       box.querySelector('#sync-now-btn').addEventListener('click', () => syncService.sync());
+      box.querySelector('#reset-sync-btn').addEventListener('click', () => {
+        if (!confirm('Cloud-Stand wirklich löschen und komplett neu von diesem Gerät hochladen? Nur tun, wenn die Vokabeln auf diesem Gerät vollständig/aktuell sind — andere Geräte übernehmen danach diesen Stand.')) return;
+        syncService.resetRemote();
+      });
     } else {
       box.querySelector('#token-form').addEventListener('submit', async (e) => {
         e.preventDefault();

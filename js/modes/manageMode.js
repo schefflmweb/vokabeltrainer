@@ -1,7 +1,7 @@
 import { vocabStore } from '../data/vocabStore.js';
 import { grammarStore } from '../data/grammarStore.js';
 import { parseCsv, toCsv, parseGrammarCsv, grammarToCsv } from '../csv/csvImport.js';
-import { authService } from '../auth/authService.js';
+import { githubAuth } from '../auth/githubAuth.js';
 import { syncService } from '../data/syncService.js';
 import { ttsService } from '../tts/ttsService.js';
 import { trashIcon, searchIcon, editIcon, checkCircleIcon, xCircleIcon, downloadIcon, chartIcon, flameIcon, speakerIcon, bookIcon } from '../ui/icons.js';
@@ -414,26 +414,39 @@ export function mount(container) {
     const box = container.querySelector('#account-box');
     if (!box) return;
 
-    if (!authService.isConfigured()) {
-      box.innerHTML = `
-        <h3>OneDrive-Sync</h3>
-        <p class="hint">Noch nicht eingerichtet. Siehe SETUP-ONEDRIVE.md für die Anleitung. Bis dahin läuft alles lokal auf diesem Gerät.</p>`;
-      return;
-    }
-
-    const signedIn = authService.isSignedIn();
+    const connected = githubAuth.isConfigured();
+    const tokenUrl = 'https://github.com/settings/tokens/new?description=Vokabeltrainer%20Sync&scopes=gist';
     box.innerHTML = `
-      <h3>OneDrive-Sync</h3>
-      <p class="hint" id="sync-status-text">–</p>
-      ${signedIn
-        ? `<button class="btn btn-secondary" id="signout-btn">Abmelden</button>
+      <h3>Sync über GitHub</h3>
+      ${connected
+        ? `<p class="hint" id="sync-status-text">–</p>
+           <button class="btn btn-secondary" id="disconnect-btn">Trennen</button>
            <button class="btn btn-secondary" id="sync-now-btn">Jetzt synchronisieren</button>`
-        : `<button class="btn btn-primary" id="signin-btn">Mit Microsoft anmelden</button>`}
+        : `<p class="hint">Vokabeln zwischen Geräten abgleichen — <a href="${tokenUrl}" target="_blank" rel="noopener">Token erstellen</a> (nur Berechtigung <code>gist</code> nötig) und hier einfügen.</p>
+           <form id="token-form" class="add-form">
+             <input type="password" id="token-input" placeholder="GitHub Personal Access Token" autocomplete="off" required />
+             <button type="submit" class="btn btn-primary">Verbinden</button>
+           </form>
+           <p class="hint" id="sync-status-text"></p>`}
     `;
 
-    box.querySelector('#signin-btn')?.addEventListener('click', () => authService.login());
-    box.querySelector('#signout-btn')?.addEventListener('click', () => authService.logout());
-    box.querySelector('#sync-now-btn')?.addEventListener('click', () => syncService.sync());
+    if (connected) {
+      box.querySelector('#disconnect-btn').addEventListener('click', () => {
+        githubAuth.disconnect();
+        renderAccountBox();
+      });
+      box.querySelector('#sync-now-btn').addEventListener('click', () => syncService.sync());
+    } else {
+      box.querySelector('#token-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = box.querySelector('#token-input');
+        const token = input.value.trim();
+        if (!token) return;
+        githubAuth.setToken(token);
+        renderAccountBox();
+        syncService.sync();
+      });
+    }
 
     unsubscribeStatus?.();
     unsubscribeStatus = syncService.onStatusChange((status) => {

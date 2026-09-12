@@ -1,6 +1,6 @@
 # Vokabeltrainer
 
-Englisch-Vokabeln lernen als installierbare PWA – Auto-Modus (Sprachausgabe, ein Tap pro Karte) fürs Fahren, Quiz-Modus für zuhause. Läuft komplett offline lokal (IndexedDB); optional Sync über dein eigenes OneDrive-Konto.
+Englisch-Vokabeln lernen als installierbare PWA – Auto-Modus (Sprachausgabe, ein Tap pro Karte) fürs Fahren, Quiz-Modus für zuhause. Läuft komplett offline lokal (IndexedDB); optional Sync über einen privaten GitHub Gist in deinem eigenen GitHub-Account.
 
 ## Lokal testen
 
@@ -12,9 +12,9 @@ npx serve .
 
 Dann im Browser öffnen (Desktop zum Testen, echtes iPhone für den vollständigen Test inkl. "Zum Home-Bildschirm").
 
-## OneDrive-Sync aktivieren
+## Sync zwischen Geräten aktivieren
 
-Siehe [SETUP-ONEDRIVE.md](SETUP-ONEDRIVE.md) – kurze Anleitung zur kostenlosen Azure-App-Registrierung. Bis dahin läuft die App normal weiter, nur ohne Geräte-übergreifenden Sync.
+Siehe [SETUP-GITHUB-SYNC.md](SETUP-GITHUB-SYNC.md) – kurze Anleitung zum GitHub-Zugriffstoken. Bis dahin läuft die App normal weiter, nur ohne Geräte-übergreifenden Sync.
 
 ## Auf dem iPhone installieren
 

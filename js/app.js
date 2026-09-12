@@ -1,4 +1,3 @@
-import { authService } from './auth/authService.js';
 import { syncService } from './data/syncService.js';
 import * as audioMode from './modes/audioMode.js';
 import * as quizMode from './modes/quizMode.js';
@@ -24,14 +23,10 @@ navButtons.forEach((btn) => {
   btn.addEventListener('click', () => showMode(btn.dataset.mode));
 });
 
-function triggerSync() {
-  authService.ready().then(() => syncService.sync());
-}
-
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') triggerSync();
+  if (document.visibilityState === 'visible') syncService.sync();
 });
-window.addEventListener('online', triggerSync);
+window.addEventListener('online', () => syncService.sync());
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -69,27 +64,6 @@ if (refreshBtn) {
   });
 }
 
-/**
- * Renders the initial mode right away rather than waiting on auth/MSAL
- * first — auth setup (in particular waiting for the MSAL script and any
- * silent-token check) can take a moment, especially on a network that's
- * slower to reach an external CDN than the app's own already-cached files,
- * and there's no reason the UI itself should sit blank for that.
- */
-function showInitialMode() {
-  const initial = (location.hash || '#audio').slice(1);
-  showMode(modes[initial] ? initial : 'audio');
-}
-
-async function initAuth() {
-  await authService.ready();
-  // May navigate away and back (interactive re-login) if the cached session
-  // has expired — only safe to do here, before periodic/background sync
-  // triggers exist (see authService.ensureSignedIn's own doc comment); the
-  // initial mode is already showing by this point, not blocked on it.
-  await authService.ensureSignedIn();
-  triggerSync();
-}
-
-showInitialMode();
-initAuth();
+const initial = (location.hash || '#audio').slice(1);
+showMode(modes[initial] ? initial : 'audio');
+syncService.sync();

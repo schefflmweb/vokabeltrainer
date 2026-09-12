@@ -179,7 +179,7 @@ export const vocabStore = {
     await db.put(record);
   },
 
-  /** Soft-deletes every vocab entry (same tombstone mechanism as remove()) so the deletion also propagates through OneDrive sync instead of being resurrected by a later merge. */
+  /** Soft-deletes every vocab entry (same tombstone mechanism as remove()) so the deletion also propagates through sync instead of being resurrected by a later merge. */
   async removeAll() {
     const all = await this.getAll();
     const now = Date.now();
@@ -225,7 +225,7 @@ export const vocabStore = {
   },
 
   /**
-   * Merge a set of remote records (from OneDrive) into local storage,
+   * Merge a set of remote records (from the sync gist) into local storage,
    * per-record last-write-wins by updatedAt. Returns the merged full set,
    * ready to be re-uploaded.
    */

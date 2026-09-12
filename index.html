@@ -13,12 +13,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <meta name="apple-mobile-web-app-title" content="Vokabeln" />
 <link rel="stylesheet" href="./css/styles.css" />
-<!-- async, not defer: a `defer` script runs (and blocks) in document order before
-     the module script below, so a slow fetch of this external CDN file — much
-     more likely on a monitored/proxied desktop network than on a phone's own
-     connection — would delay the whole app's startup. authService.js awaits
-     the library actually being available instead of assuming defer ordering. -->
-<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@5.21.0/lib/msal-browser.min.js" async></script>
 </head>
 <body>
 <header class="app-header">

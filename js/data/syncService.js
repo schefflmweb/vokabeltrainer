@@ -1,11 +1,15 @@
-import { authService } from '../auth/authService.js';
+import { githubAuth } from '../auth/githubAuth.js';
 import { vocabStore } from './vocabStore.js';
 import { grammarStore } from './grammarStore.js';
 import { db } from './db.js';
 
-const GRAPH_BASE = 'https://graph.microsoft.com/v1.0/me/drive/special/approot:/';
+const API_BASE = 'https://api.github.com';
+// Marks the gist as "ours" so a second device signed in with the same token
+// finds and reuses it instead of creating a duplicate — the equivalent of
+// OneDrive's fixed "Apps/Vokabeltrainer" app-folder path.
+const GIST_DESCRIPTION = 'Vokabeltrainer-Daten (bitte nicht löschen)';
 
-/** Each collection gets its own file in the OneDrive app folder, synced independently but as part of the same sync() pass. */
+/** Each collection is one file inside the same gist, synced together in a single pull→merge→push pass. */
 const COLLECTIONS = [
   { store: vocabStore, fileName: 'vocab-data.json', field: 'vocab' },
   { store: grammarStore, fileName: 'grammar-data.json', field: 'grammar' }
@@ -22,46 +26,86 @@ function setStatus(next) {
   listeners.forEach((fn) => fn(status));
 }
 
-async function fetchRemote(token, fileName, field) {
-  const res = await fetch(`${GRAPH_BASE}${fileName}:/content`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (res.status === 404) return { records: null, etag: null };
-  if (!res.ok) throw new Error(`OneDrive-Abruf fehlgeschlagen (${res.status})`);
-  const etag = res.headers.get('ETag');
-  const body = await res.json();
-  return { records: body[field] || [], etag };
-}
-
-async function pushRemote(token, fileName, field, records, etag) {
-  const headers = {
+function authHeaders(token) {
+  return {
     Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json'
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28'
   };
-  if (etag) headers['If-Match'] = etag;
-  const res = await fetch(`${GRAPH_BASE}${fileName}:/content`, {
-    method: 'PUT',
-    headers,
-    body: JSON.stringify({ [field]: records, savedAt: new Date().toISOString() })
-  });
-  return res;
 }
 
-/** Pull → merge → push for one collection, with a single retry if someone else wrote in the meantime (412). */
-async function syncCollection(token, { store, fileName, field }) {
-  let { records: remoteRecords, etag } = await fetchRemote(token, fileName, field);
-  const merged = await store.mergeFromRemote(remoteRecords);
+/** Finds the gist created by a previous sync (on this or another device with the same token) rather than creating a duplicate every time localStorage doesn't already have the id cached. */
+async function findExistingGistId(token) {
+  const res = await fetch(`${API_BASE}/gists?per_page=100`, { headers: authHeaders(token) });
+  if (!res.ok) throw new Error(`GitHub-Abruf fehlgeschlagen (${res.status})`);
+  const gists = await res.json();
+  const match = gists.find((g) => g.description === GIST_DESCRIPTION);
+  return match ? match.id : null;
+}
 
-  let res = await pushRemote(token, fileName, field, merged, etag);
-  if (res.status === 412) {
-    const retryRemote = await fetchRemote(token, fileName, field);
-    const remerged = await store.mergeFromRemote(retryRemote.records);
-    res = await pushRemote(token, fileName, field, remerged, retryRemote.etag);
+async function createGist(token) {
+  const files = Object.fromEntries(
+    COLLECTIONS.map(({ fileName, field }) => [
+      fileName,
+      { content: JSON.stringify({ [field]: [], savedAt: new Date().toISOString() }) }
+    ])
+  );
+  const res = await fetch(`${API_BASE}/gists`, {
+    method: 'POST',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description: GIST_DESCRIPTION, public: false, files })
+  });
+  if (!res.ok) throw new Error(`Gist anlegen fehlgeschlagen (${res.status})`);
+  const created = await res.json();
+  return created.id;
+}
+
+async function resolveGistId(token) {
+  const cached = githubAuth.getGistId();
+  if (cached) return cached;
+  const found = await findExistingGistId(token);
+  const id = found || await createGist(token);
+  githubAuth.setGistId(id);
+  return id;
+}
+
+/** Files over ~1MB come back with `content` omitted and `truncated: true` — the vocab file alone exceeds that once a large CSV has been imported, so those need a second fetch against raw_url. */
+async function fetchGistFiles(token, gistId) {
+  const res = await fetch(`${API_BASE}/gists/${gistId}`, { headers: authHeaders(token) });
+  if (res.status === 404) {
+    // The cached gist id no longer exists (deleted on github.com, say) — drop it so the next sync creates/finds a fresh one instead of failing forever.
+    githubAuth.setGistId('');
+    throw new Error('Gist nicht gefunden — bitte erneut synchronisieren');
   }
-  if (!res.ok) throw new Error(`OneDrive-Speichern fehlgeschlagen (${res.status})`);
+  if (!res.ok) throw new Error(`GitHub-Abruf fehlgeschlagen (${res.status})`);
+  const gist = await res.json();
+  const files = gist.files || {};
+  await Promise.all(Object.values(files).map(async (file) => {
+    if (file.truncated && file.raw_url) {
+      const rawRes = await fetch(file.raw_url, { headers: authHeaders(token) });
+      if (rawRes.ok) file.content = await rawRes.text();
+    }
+  }));
+  return files;
+}
 
-  const dirty = await store.getDirty();
-  await store.clearDirty(dirty.map((d) => d.id));
+async function pushGistFiles(token, gistId, filesPayload) {
+  const res = await fetch(`${API_BASE}/gists/${gistId}`, {
+    method: 'PATCH',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files: filesPayload })
+  });
+  if (!res.ok) throw new Error(`GitHub-Speichern fehlgeschlagen (${res.status})`);
+}
+
+function parseRemoteRecords(file, field) {
+  if (!file?.content) return null;
+  try {
+    const body = JSON.parse(file.content);
+    return body[field] || [];
+  } catch {
+    return null;
+  }
 }
 
 export const syncService = {
@@ -77,7 +121,7 @@ export const syncService = {
     return status;
   },
 
-  /** Runs a sync now. Concurrent calls join the same in-flight run instead of firing overlapping full-collection uploads. */
+  /** Runs a sync now. Concurrent calls join the same in-flight run instead of firing overlapping requests. */
   sync() {
     if (syncPromise) return syncPromise;
     syncPromise = this._runSync().finally(() => {
@@ -89,8 +133,7 @@ export const syncService = {
   /**
    * Opportunistic sync for high-frequency call sites (e.g. after every card
    * review) — coalesces bursts into a single run a few seconds after the
-   * last request instead of doing a full upload/download of the whole
-   * collection per review.
+   * last request instead of hitting the API once per review.
    */
   scheduleSync() {
     clearTimeout(scheduleTimer);
@@ -98,21 +141,30 @@ export const syncService = {
   },
 
   async _runSync() {
-    if (!authService.isConfigured()) {
-      setStatus({ state: 'offline', message: 'OneDrive-Sync noch nicht eingerichtet' });
-      return;
-    }
-    const token = await authService.acquireToken();
+    const token = githubAuth.getToken();
     if (!token) {
-      setStatus({ state: 'signed-out', message: 'Nicht angemeldet – arbeitet lokal weiter' });
+      setStatus({ state: 'signed-out', message: 'Nicht verbunden – arbeitet lokal weiter' });
       return;
     }
 
     setStatus({ state: 'syncing', message: 'Synchronisiere …' });
     try {
-      for (const collection of COLLECTIONS) {
-        await syncCollection(token, collection);
+      const gistId = await resolveGistId(token);
+      const files = await fetchGistFiles(token, gistId);
+
+      const pushPayload = {};
+      for (const { store, fileName, field } of COLLECTIONS) {
+        const remoteRecords = parseRemoteRecords(files[fileName], field);
+        const merged = await store.mergeFromRemote(remoteRecords);
+        pushPayload[fileName] = { content: JSON.stringify({ [field]: merged, savedAt: new Date().toISOString() }) };
       }
+      await pushGistFiles(token, gistId, pushPayload);
+
+      for (const { store } of COLLECTIONS) {
+        const dirty = await store.getDirty();
+        await store.clearDirty(dirty.map((d) => d.id));
+      }
+
       await db.setMeta('lastSync', Date.now());
       setStatus({ state: 'synced', message: 'Synchronisiert', lastSync: Date.now() });
     } catch (err) {

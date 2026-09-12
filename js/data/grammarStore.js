@@ -197,7 +197,7 @@ export const grammarStore = {
     await db.putAll(toClear, STORE);
   },
 
-  /** Same per-record last-write-wins merge as vocabStore — kept here ready for when OneDrive sync is extended to grammar too. */
+  /** Same per-record last-write-wins merge as vocabStore — used by syncService for the grammar collection's gist file. */
   async mergeFromRemote(remoteRecords) {
     const localAll = await db.getAll(STORE);
     const localById = new Map(localAll.map((r) => [r.id, r]));

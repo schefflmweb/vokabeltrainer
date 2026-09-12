@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'vokabeltrainer-v4';
+const CACHE_VERSION = 'vokabeltrainer-v5';
 const APP_SHELL = [
   './',
   './index.html',
@@ -9,8 +9,7 @@ const APP_SHELL = [
   './js/data/vocabStore.js',
   './js/data/grammarStore.js',
   './js/data/syncService.js',
-  './js/auth/authService.js',
-  './js/auth/authConfig.js',
+  './js/auth/githubAuth.js',
   './js/srs/scheduler.js',
   './js/tts/ttsService.js',
   './js/stt/speechInputService.js',
@@ -51,10 +50,7 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  // Never intercept calls to Microsoft auth/graph endpoints — always go to network.
-  if (url.origin.includes('login.microsoftonline.com') || url.origin.includes('graph.microsoft.com')) {
-    return;
-  }
+  // Only cache the app's own same-origin files — never GitHub API calls or anything else external.
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(

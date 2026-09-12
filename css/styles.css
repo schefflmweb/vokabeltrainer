@@ -55,6 +55,13 @@ body {
   text-align: center;
 }
 
+.app-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
 .app-header h1 {
   margin: 0;
   font-size: 1.6rem;
@@ -64,6 +71,33 @@ body {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+.header-refresh-btn {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.header-refresh-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.header-refresh-btn.is-refreshing svg {
+  animation: header-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes header-refresh-spin {
+  to { transform: rotate(360deg); }
 }
 
 .app-view {

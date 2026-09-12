@@ -131,9 +131,18 @@ export function parseGrammarCsv(text) {
   for (let i = start; i < lines.length; i++) {
     const cols = parseLine(lines[i], delimiter);
     const [topic, question, opt1, opt2, opt3, opt4, correct, explanation] = cols;
-    const options = [opt1, opt2, opt3, opt4].filter((o) => o && o.length > 0);
-    const correctIndex = parseInt(correct, 10) - 1;
-    if (!question || options.length < 2 || !Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= options.length) continue;
+    // Filtering out blank options (fewer than 4 real choices) shifts array
+    // positions, so the 1-based "correct" column — which refers to the
+    // ORIGINAL 4 columns — can no longer be used as-is: if a blank option
+    // sits before the correct one, taking parseInt(correct)-1 as the index
+    // into the filtered array would point at the wrong option. Track each
+    // option's original position through the filter and re-find it there.
+    const rawOptions = [opt1, opt2, opt3, opt4].map((value, originalIndex) => ({ value, originalIndex }));
+    const kept = rawOptions.filter((o) => o.value && o.value.length > 0);
+    const options = kept.map((o) => o.value);
+    const originalCorrectIndex = parseInt(correct, 10) - 1;
+    const correctIndex = kept.findIndex((o) => o.originalIndex === originalCorrectIndex);
+    if (!question || options.length < 2 || correctIndex < 0) continue;
     entries.push({ topic: topic || 'Eigene', question, options, correctIndex, explanation: explanation || '' });
   }
   return entries;

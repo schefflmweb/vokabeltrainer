@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'vokabeltrainer-v3';
+const CACHE_VERSION = 'vokabeltrainer-v4';
 const APP_SHELL = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const APP_SHELL = [
   './js/data/grammarStore.js',
   './js/data/syncService.js',
   './js/auth/authService.js',
+  './js/auth/authConfig.js',
   './js/srs/scheduler.js',
   './js/tts/ttsService.js',
   './js/stt/speechInputService.js',

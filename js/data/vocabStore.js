@@ -79,9 +79,17 @@ export const vocabStore = {
     return shuffled.slice(0, limit);
   },
 
-  /** Adds a vocab entry, or updates the existing one (by English word, case-insensitive) if it already exists — never creates a duplicate. Learning progress on an updated entry is preserved. */
-  async add({ en, de, category, example, type }) {
-    const all = await db.getAll();
+  /**
+   * Adds a vocab entry, or updates the existing one (by English word,
+   * case-insensitive) if it already exists — never creates a duplicate.
+   * Learning progress on an updated entry is preserved. `knownList`, if
+   * given, is used for the dedup check instead of a fresh full-table scan —
+   * callers that already keep the full list in memory (e.g. manageMode's
+   * vocabCache) should pass it, since a getAll() per single add gets slow
+   * once the collection is large.
+   */
+  async add({ en, de, category, example, type }, knownList = null) {
+    const all = knownList || await db.getAll();
     const target = normalizeEn(en);
     const existing = all.find((v) => !v.deleted && normalizeEn(v.en) === target);
     if (existing) {
@@ -109,9 +117,9 @@ export const vocabStore = {
     return record;
   },
 
-  /** Same dedup behavior as add(), batched — used by CSV import. Returns which entries were newly added vs. updated. */
-  async addMany(entries) {
-    const all = await db.getAll();
+  /** Same dedup behavior as add(), batched — used by CSV import. Returns which entries were newly added vs. updated. Same `knownList` optimization as add(). */
+  async addMany(entries, knownList = null) {
+    const all = knownList || await db.getAll();
     const byEn = new Map(all.filter((v) => !v.deleted).map((v) => [normalizeEn(v.en), v]));
     const now = Date.now();
     const added = [];

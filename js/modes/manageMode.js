@@ -83,6 +83,7 @@ export function mount(container) {
   let grammarCsvStatusMessage = '';
   let searchQuery = '';
   let vocabCache = [];
+  let grammarAllCache = [];
   let grammarCount = 0;
   let editingId = null;
   let lastSyncState = null;
@@ -178,6 +179,15 @@ export function mount(container) {
     URL.revokeObjectURL(url);
   }
 
+  /** Re-reads just the (small) grammar collection and refreshes its count — used after a grammar-only edit, so it doesn't also pay for reloading the whole (possibly much larger) vocab collection like a full render() would. */
+  async function updateGrammarUI() {
+    if (!container.querySelector('.manage-mode')) return;
+    grammarAllCache = await grammarStore.getAll();
+    grammarCount = grammarAllCache.length;
+    const el = container.querySelector('#grammar-count');
+    if (el) el.textContent = grammarCount;
+  }
+
   /** Recomputes the stat tiles from the in-memory vocabCache — no DB read, so it's cheap to call after every local edit. */
   async function updateStatsUI() {
     if (!container.querySelector('.manage-mode')) return; // Verwalten isn't the visible screen anymore.
@@ -204,12 +214,7 @@ export function mount(container) {
 
     vocabCache = await vocabStore.getAll();
     updateVocabListOnly();
-
-    const grammarAll = await grammarStore.getAll();
-    grammarCount = grammarAll.length;
-    const grammarCountEl = container.querySelector('#grammar-count');
-    if (grammarCountEl) grammarCountEl.textContent = grammarCount;
-
+    await updateGrammarUI();
     await updateStatsUI();
   }
 
@@ -221,8 +226,8 @@ export function mount(container) {
     }
     vocabCache = await vocabStore.getAll();
     const filtered = filterVocab(vocabCache, searchQuery);
-    const grammarAll = await grammarStore.getAll();
-    grammarCount = grammarAll.length;
+    grammarAllCache = await grammarStore.getAll();
+    grammarCount = grammarAllCache.length;
 
     const now = Date.now();
     const dueToday = vocabCache.filter((v) => v.srs.dueDate <= now).length;
@@ -312,7 +317,7 @@ export function mount(container) {
       const form = e.target;
       const data = Object.fromEntries(new FormData(form).entries());
       if (!data.en.trim() || !data.de.trim()) return;
-      const record = await vocabStore.add(data);
+      const record = await vocabStore.add(data, vocabCache);
       syncService.sync();
       form.reset();
       const idx = vocabCache.findIndex((v) => v.id === record.id);
@@ -335,7 +340,10 @@ export function mount(container) {
       vocabCache = [];
       searchQuery = '';
       visibleCount = VOCAB_PAGE_SIZE;
-      render();
+      const searchInput = container.querySelector('#vocab-search');
+      if (searchInput) searchInput.value = '';
+      updateStatsUI();
+      updateVocabListOnly();
     });
 
     container.querySelector('#csv-file').addEventListener('change', async (e) => {
@@ -352,7 +360,7 @@ export function mount(container) {
         container.querySelector('#csv-status').textContent = csvStatusMessage;
         return;
       }
-      const { added, updated } = await vocabStore.addMany(entries);
+      const { added, updated } = await vocabStore.addMany(entries, vocabCache);
       syncService.sync();
       const changedIds = new Set([...added, ...updated].map((v) => v.id));
       vocabCache = vocabCache.filter((v) => !changedIds.has(v.id)).concat(added, updated);
@@ -384,16 +392,18 @@ export function mount(container) {
       grammarCsvStatusMessage = updated.length > 0
         ? `${added.length} neu hinzugefügt, ${updated.length} bereits vorhandene aktualisiert.`
         : `${added.length} Übungen importiert.`;
-      render();
+      container.querySelector('#grammar-csv-status').textContent = grammarCsvStatusMessage;
+      container.querySelector('#grammar-csv-text').value = '';
+      updateGrammarUI();
     });
 
-    container.querySelector('#grammar-csv-export-btn').addEventListener('click', () => exportGrammarCsv(grammarAll));
+    container.querySelector('#grammar-csv-export-btn').addEventListener('click', () => exportGrammarCsv(grammarAllCache));
 
     container.querySelector('#grammar-delete-all-btn').addEventListener('click', async () => {
       if (!confirm(`Wirklich alle ${grammarCount} Grammatikübungen (inkl. Fortschritt) unwiderruflich löschen?`)) return;
       await grammarStore.removeAll();
       syncService.sync();
-      render();
+      updateGrammarUI();
     });
 
     renderAccountBox();

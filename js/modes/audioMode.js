@@ -272,7 +272,7 @@ export function mount(container) {
     const correct = speechInputService.answersMatchAny(transcripts, expected);
     stats[correct ? 'known' : 'unknown'] += 1;
     vocabStore.markReviewed(card.id, correct);
-    syncService.sync();
+    syncService.scheduleSync();
     voiceResult = { transcript: transcripts?.[0] || '', correct, expected };
     voiceState = 'result';
     render();
@@ -348,7 +348,7 @@ export function mount(container) {
     }
     stats[known ? 'known' : 'unknown'] += 1;
     vocabStore.markReviewed(card.id, known);
-    syncService.sync();
+    syncService.scheduleSync();
     index += 1;
     if (currentCard()) {
       phase = 'active';

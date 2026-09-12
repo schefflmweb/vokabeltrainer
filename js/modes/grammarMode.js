@@ -40,7 +40,7 @@ export function mount(container) {
   function registerAnswer(correct, item) {
     stats[correct ? 'known' : 'unknown'] += 1;
     grammarStore.markReviewed(item.id, correct);
-    syncService.sync();
+    syncService.scheduleSync();
   }
 
   function next() {

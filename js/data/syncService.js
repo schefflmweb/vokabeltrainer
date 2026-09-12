@@ -13,6 +13,9 @@ const COLLECTIONS = [
 
 let listeners = [];
 let status = { state: 'offline', message: 'Nur lokal gespeichert', lastSync: null };
+let syncPromise = null;
+let scheduleTimer = null;
+const SCHEDULE_DEBOUNCE_MS = 3000;
 
 function setStatus(next) {
   status = { ...status, ...next };
@@ -74,7 +77,27 @@ export const syncService = {
     return status;
   },
 
-  async sync() {
+  /** Runs a sync now. Concurrent calls join the same in-flight run instead of firing overlapping full-collection uploads. */
+  sync() {
+    if (syncPromise) return syncPromise;
+    syncPromise = this._runSync().finally(() => {
+      syncPromise = null;
+    });
+    return syncPromise;
+  },
+
+  /**
+   * Opportunistic sync for high-frequency call sites (e.g. after every card
+   * review) — coalesces bursts into a single run a few seconds after the
+   * last request instead of doing a full upload/download of the whole
+   * collection per review.
+   */
+  scheduleSync() {
+    clearTimeout(scheduleTimer);
+    scheduleTimer = setTimeout(() => this.sync(), SCHEDULE_DEBOUNCE_MS);
+  },
+
+  async _runSync() {
     if (!authService.isConfigured()) {
       setStatus({ state: 'offline', message: 'OneDrive-Sync noch nicht eingerichtet' });
       return;

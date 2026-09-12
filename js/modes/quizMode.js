@@ -125,7 +125,7 @@ export function mount(container) {
   function registerAnswer(correct, card) {
     stats[correct ? 'known' : 'unknown'] += 1;
     vocabStore.markReviewed(card.id, correct);
-    syncService.sync();
+    syncService.scheduleSync();
   }
 
   function next() {

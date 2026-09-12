@@ -35,16 +35,25 @@ function renderEditRowHtml(v) {
     </form>`;
 }
 
-function renderVocabRowsHtml(list, editingId) {
+const VOCAB_PAGE_SIZE = 150;
+
+/**
+ * Only the first `visibleCount` entries are turned into DOM — with large
+ * imported lists (thousands of words), rendering every row at once made
+ * opening/searching "Verwalten" very slow. A "Mehr anzeigen" button reveals
+ * more in pages instead.
+ */
+function renderVocabRowsHtml(list, editingId, visibleCount) {
   if (list.length === 0) {
     return `<p class="hint">Keine Treffer.</p>`;
   }
+  const page = list.slice(0, visibleCount);
   const byCategory = {};
-  for (const v of list) {
+  for (const v of page) {
     (byCategory[v.category] ||= []).push(v);
   }
   const categories = Object.keys(byCategory).sort();
-  return categories.map((cat) => `
+  const rowsHtml = categories.map((cat) => `
     <div class="vocab-category">
       <h4>${escapeHtml(cat)}</h4>
       ${byCategory[cat].map((v) => v.id === editingId ? renderEditRowHtml(v) : `
@@ -58,6 +67,13 @@ function renderVocabRowsHtml(list, editingId) {
       `).join('')}
     </div>
   `).join('');
+
+  const remaining = list.length - page.length;
+  const moreHtml = remaining > 0
+    ? `<button type="button" class="btn btn-secondary" id="vocab-load-more-btn">Weitere ${Math.min(remaining, VOCAB_PAGE_SIZE)} anzeigen (${remaining} übrig)</button>`
+    : '';
+
+  return rowsHtml + moreHtml;
 }
 
 export function mount(container) {
@@ -70,6 +86,7 @@ export function mount(container) {
   let grammarCount = 0;
   let editingId = null;
   let lastSyncState = null;
+  let visibleCount = VOCAB_PAGE_SIZE;
 
   function bindRowActions(scopeEl) {
     scopeEl.querySelectorAll('.delete-btn').forEach((btn) => {
@@ -105,6 +122,11 @@ export function mount(container) {
         render();
       });
     });
+
+    scopeEl.querySelector('#vocab-load-more-btn')?.addEventListener('click', () => {
+      visibleCount += VOCAB_PAGE_SIZE;
+      updateVocabListOnly();
+    });
   }
 
   /** Re-renders only the list + count, leaving the search input itself untouched so it never loses focus while typing. */
@@ -112,9 +134,11 @@ export function mount(container) {
     const listEl = container.querySelector('#vocab-list-container');
     if (!listEl) return; // Verwalten isn't the visible screen anymore (e.g. a sync callback resolving after navigating away) — nothing to update.
     const input = container.querySelector('#vocab-search');
-    searchQuery = input ? input.value : searchQuery;
+    const newQuery = input ? input.value : searchQuery;
+    if (newQuery !== searchQuery) visibleCount = VOCAB_PAGE_SIZE; // fresh search — start paging from the top again
+    searchQuery = newQuery;
     const filtered = filterVocab(vocabCache, searchQuery);
-    listEl.innerHTML = renderVocabRowsHtml(filtered, editingId);
+    listEl.innerHTML = renderVocabRowsHtml(filtered, editingId, visibleCount);
     bindRowActions(listEl);
     const countEl = container.querySelector('#vocab-count');
     if (countEl) countEl.textContent = filtered.length;
@@ -244,7 +268,7 @@ export function mount(container) {
             <span class="icon-inline-wrap search-icon">${searchIcon}</span>
             <input type="text" id="vocab-search" class="search-input" placeholder="Suchen (Englisch oder Deutsch) …" value="${escapeHtml(searchQuery)}" />
           </div>
-          <div class="vocab-list" id="vocab-list-container">${renderVocabRowsHtml(filtered, editingId)}</div>
+          <div class="vocab-list" id="vocab-list-container">${renderVocabRowsHtml(filtered, editingId, visibleCount)}</div>
         </section>
 
         <section>

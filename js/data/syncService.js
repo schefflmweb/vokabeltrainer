@@ -65,7 +65,7 @@ async function resolveGistId(token) {
   if (cached) return cached;
   const found = await findExistingGistId(token);
   const id = found || await createGist(token);
-  githubAuth.setGistId(id);
+  await githubAuth.setGistId(id);
   return id;
 }
 
@@ -74,7 +74,7 @@ async function fetchGistFiles(token, gistId) {
   const res = await fetch(`${API_BASE}/gists/${gistId}`, { headers: authHeaders(token) });
   if (res.status === 404) {
     // The cached gist id no longer exists (deleted on github.com, say) — drop it so the next sync creates/finds a fresh one instead of failing forever.
-    githubAuth.setGistId('');
+    await githubAuth.setGistId('');
     throw new Error('Gist nicht gefunden — bitte erneut synchronisieren');
   }
   if (!res.ok) throw new Error(`GitHub-Abruf fehlgeschlagen (${res.status})`);
@@ -141,6 +141,7 @@ export const syncService = {
   },
 
   async _runSync() {
+    await githubAuth.ready();
     const token = githubAuth.getToken();
     if (!token) {
       setStatus({ state: 'signed-out', message: 'Nicht verbunden – arbeitet lokal weiter' });

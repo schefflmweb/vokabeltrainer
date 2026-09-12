@@ -224,6 +224,7 @@ export function mount(container) {
     if (!container.querySelector('.manage-mode')) {
       container.innerHTML = `<div class="manage-mode pad"><p class="hint">Lädt …</p></div>`;
     }
+    await githubAuth.ready();
     vocabCache = await vocabStore.getAll();
     const filtered = filterVocab(vocabCache, searchQuery);
     grammarAllCache = await grammarStore.getAll();
@@ -431,18 +432,24 @@ export function mount(container) {
     `;
 
     if (connected) {
-      box.querySelector('#disconnect-btn').addEventListener('click', () => {
-        githubAuth.disconnect();
+      box.querySelector('#disconnect-btn').addEventListener('click', async () => {
+        await githubAuth.disconnect();
         renderAccountBox();
       });
       box.querySelector('#sync-now-btn').addEventListener('click', () => syncService.sync());
     } else {
-      box.querySelector('#token-form').addEventListener('submit', (e) => {
+      box.querySelector('#token-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const input = box.querySelector('#token-input');
         const token = input.value.trim();
         if (!token) return;
-        githubAuth.setToken(token);
+        try {
+          await githubAuth.setToken(token);
+        } catch (err) {
+          const statusEl = box.querySelector('#sync-status-text');
+          if (statusEl) statusEl.textContent = err.message || 'Token konnte nicht gespeichert werden.';
+          return;
+        }
         renderAccountBox();
         syncService.sync();
       });

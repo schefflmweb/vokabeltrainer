@@ -9,6 +9,11 @@ export const playIcon = icon(`
   <path d="M10 8.3l6.2 3.7-6.2 3.7z" fill="currentColor" stroke="none"/>
 `);
 
+export const pauseIcon = icon(`
+  <circle cx="12" cy="12" r="9"/>
+  <path d="M10 8.3v7.4M14 8.3v7.4" stroke-linecap="round"/>
+`);
+
 export const checkCircleIcon = icon(`
   <circle cx="12" cy="12" r="9"/>
   <path d="M8 12.4l2.6 2.6 5.4-6"/>

@@ -7,7 +7,7 @@ import { audioSessionUnlock } from '../audio/audioSessionUnlock.js';
 import { progressBarHtml } from '../ui/progressBar.js';
 import { flagGB, flagDE } from '../ui/flags.js';
 import {
-  playIcon, tapIcon, micIcon, warningIcon, hourglassIcon, refreshIcon, starIcon,
+  playIcon, pauseIcon, tapIcon, micIcon, warningIcon, hourglassIcon, refreshIcon, starIcon,
   thinkingIcon, speakerIcon, xCircleIcon, checkCircleIcon, errorIcon, skipIcon
 } from '../ui/icons.js';
 
@@ -21,6 +21,10 @@ const TAP_AUTO_ADVANCE_BACKSTOP_MS = 6000;
 // chains in this file. Generous, since a real long word/phrase should still
 // finish speaking well within it.
 const PRIMARY_SPEECH_BACKSTOP_MS = 4000;
+// Pause before jumping to the next card, once the translation has finished
+// being spoken — and the only window during which the Stopp/Weiter button
+// is active (see revealTranslation()/enterStopWindow()).
+const STOP_WINDOW_MS = 2500;
 
 export function mount(container) {
   let direction = 'en-de'; // 'en-de' | 'de-en'
@@ -42,6 +46,11 @@ export function mount(container) {
   // room for active recall before it's shown/spoken.
   let tapRevealed = false;
   let tapRevealTimer = null;
+  // Single Stopp/Weiter button state, replacing manual known/unknown rating
+  // (not useful while driving — see enterStopWindow()): 'disabled' outside
+  // the post-translation pause window, 'stopp' while the window is counting
+  // down toward the next card, 'weiter' once the user has paused it.
+  let tapPauseState = 'disabled';
   function clearRevealTimer() {
     if (tapRevealTimer) {
       clearTimeout(tapRevealTimer);
@@ -123,6 +132,7 @@ export function mount(container) {
     }
     activeListen?.stop();
     activeListen = null;
+    tapPauseState = 'disabled';
     phase = 'select';
     render();
   }
@@ -141,6 +151,7 @@ export function mount(container) {
     }
     if (interactionMode === 'tap') {
       tapRevealed = false;
+      tapPauseState = 'disabled';
       render();
       clearRevealTimer();
       clearPrimarySpeechTimer();
@@ -177,8 +188,7 @@ export function mount(container) {
    * autoplay policy can silently drop — best-effort only. The translation is
    * always shown as text regardless, and "Nochmal anhören" lets the user
    * trigger it manually (a real tap) if the auto-speak didn't play. Once the
-   * reveal speech ends, the card auto-advances (counted as "kannte ich")
-   * unless the user already tapped ✅/❌ themselves.
+   * reveal speech ends, the post-translation pause (enterStopWindow) begins.
    */
   function revealTranslation(card) {
     if (currentCard() !== card || interactionMode !== 'tap') return;
@@ -186,10 +196,49 @@ export function mount(container) {
     render();
     const items = [{ text: secondaryText(card), lang: answerLang() }];
     if (card.example) items.push({ text: card.example, lang: 'en' });
-    ttsService.speakSequence(items, () => autoAdvanceTap(card));
+    let windowEntered = false;
+    const enterWindowOnce = () => {
+      if (windowEntered) return;
+      windowEntered = true;
+      if (autoAdvanceTimer) {
+        clearTimeout(autoAdvanceTimer);
+        autoAdvanceTimer = null;
+      }
+      enterStopWindow(card);
+    };
+    ttsService.speakSequence(items, enterWindowOnce);
     // Backstop in case none of the onend callbacks fire (speech silently dropped).
     if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
-    autoAdvanceTimer = setTimeout(() => autoAdvanceTap(card), TAP_AUTO_ADVANCE_BACKSTOP_MS);
+    autoAdvanceTimer = setTimeout(enterWindowOnce, TAP_AUTO_ADVANCE_BACKSTOP_MS);
+  }
+
+  /**
+   * The only window during which the Stopp/Weiter button is active. Starts
+   * counting down to the next card immediately; tapping "Stopp" during it
+   * cancels that countdown and switches the button to "Weiter", which then
+   * jumps to the next card whenever tapped (no time limit once paused).
+   */
+  function enterStopWindow(card) {
+    if (currentCard() !== card) return;
+    tapPauseState = 'stopp';
+    render();
+    autoAdvanceTimer = setTimeout(() => autoAdvanceTap(card), STOP_WINDOW_MS);
+  }
+
+  function handlePauseButton() {
+    const card = currentCard();
+    if (!card) return;
+    if (tapPauseState === 'stopp') {
+      if (autoAdvanceTimer) {
+        clearTimeout(autoAdvanceTimer);
+        autoAdvanceTimer = null;
+      }
+      tapPauseState = 'weiter';
+      render();
+    } else if (tapPauseState === 'weiter') {
+      autoAdvanceTap(card);
+    }
+    // 'disabled': the button shouldn't be clickable at all outside the window.
   }
 
   function autoAdvanceTap(card) {
@@ -198,7 +247,8 @@ export function mount(container) {
       clearTimeout(autoAdvanceTimer);
       autoAdvanceTimer = null;
     }
-    rate(true); // no explicit tap -> counts as "kannte ich" per user's choice
+    tapPauseState = 'disabled';
+    rate(true); // no rating buttons anymore — every card that plays through (or is manually continued) counts as "kannte ich"
   }
 
   function beginListening(card) {
@@ -388,6 +438,8 @@ export function mount(container) {
     const secondaryHtml = tapRevealed
       ? escapeHtml(secondaryText(card))
       : `<span class="icon-inline-wrap">${thinkingIcon}</span> Zeit zum Nachdenken …`;
+    const pauseLabel = tapPauseState === 'weiter' ? 'Weiter' : 'Stopp';
+    const pauseIconHtml = tapPauseState === 'weiter' ? playIcon : pauseIcon;
     container.innerHTML = `
       <div class="audio-mode">
         ${progressBarHtml(index, queue.length)}
@@ -396,15 +448,13 @@ export function mount(container) {
           <div class="card-secondary ${tapRevealed ? '' : 'reveal-pending'}">${secondaryHtml}</div>
         </div>
         <button class="btn btn-secondary btn-with-icon" id="replay-btn"><span class="icon-inline-wrap">${speakerIcon}</span> Nochmal anhören</button>
-        <div class="rate-buttons">
-          <button class="btn btn-huge btn-danger btn-with-icon" id="unknown-btn"><span class="icon-inline-wrap icon-lg">${xCircleIcon}</span> Nochmal üben</button>
-          <button class="btn btn-huge btn-success btn-with-icon" id="known-btn"><span class="icon-inline-wrap icon-lg">${checkCircleIcon}</span> Kannte ich</button>
-        </div>
+        <button class="btn btn-huge btn-primary btn-with-icon" id="pause-btn" ${tapPauseState === 'disabled' ? 'disabled' : ''}>
+          <span class="icon-inline-wrap icon-lg">${pauseIconHtml}</span> ${pauseLabel}
+        </button>
       </div>`;
 
     container.querySelector('#replay-btn').addEventListener('click', replay);
-    container.querySelector('#unknown-btn').addEventListener('click', () => rate(false));
-    container.querySelector('#known-btn').addEventListener('click', () => rate(true));
+    container.querySelector('#pause-btn').addEventListener('click', handlePauseButton);
   }
 
   function renderVoiceActive() {

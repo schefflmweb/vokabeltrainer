@@ -12,9 +12,6 @@ const SESSION_SIZE = 15;
 const REVEAL_DELAY_MS = 3000;
 const PRIMARY_SPEECH_BACKSTOP_MS = 4000;
 const TRANSLATION_SPEECH_BACKSTOP_MS = 6000;
-// Pause after the translation finishes speaking, before auto-advancing to
-// the next card — the only window during which the rate buttons are active.
-const STOP_WINDOW_MS = 2500;
 
 function shuffle(arr) {
   return [...arr].sort(() => Math.random() - 0.5);
@@ -34,16 +31,18 @@ export function mount(container) {
   let rtRevealed = false;
   let rtRevealTimer = null;
   let rtPrimarySpeechTimer = null;
-  let rtAutoAdvanceTimer = null;
-  let rtPendingAdvance = false; // guards against double-advance (auto path + manual rate tap racing)
-  // True only during the post-translation pause (STOP_WINDOW_MS) — the rate
-  // buttons are disabled the rest of the time (primary word speaking,
-  // thinking pause, translation speaking).
+  let rtActivateBackstopTimer = null; // in case a speech onEnd never fires — see revealReadThink()
+  let rtPendingAdvance = false; // guards against double-advance (manual rate tap racing with itself)
+  // True once the translation has finished being spoken — "Nochmal üben"/
+  // "Kannte ich" are disabled before that (primary word speaking, thinking
+  // pause, translation speaking) and stay active afterward with no time
+  // limit; there's no auto-advance, so one of them must be tapped to
+  // continue.
   let rtButtonsActive = false;
   function clearRtTimers() {
     if (rtRevealTimer) { clearTimeout(rtRevealTimer); rtRevealTimer = null; }
     if (rtPrimarySpeechTimer) { clearTimeout(rtPrimarySpeechTimer); rtPrimarySpeechTimer = null; }
-    if (rtAutoAdvanceTimer) { clearTimeout(rtAutoAdvanceTimer); rtAutoAdvanceTimer = null; }
+    if (rtActivateBackstopTimer) { clearTimeout(rtActivateBackstopTimer); rtActivateBackstopTimer = null; }
   }
 
   // iOS Safari only allows speechSynthesis.speak() when called synchronously
@@ -284,7 +283,7 @@ export function mount(container) {
     container.querySelector('#next-btn').addEventListener('click', next);
   }
 
-  /** Called synchronously from a tap (start / next-card) — speaks the prompt word, then (after a thinking pause) the translation, then auto-advances. */
+  /** Called synchronously from a tap (start / next-card) — speaks the prompt word, then (after a thinking pause) the translation, then activates the rate buttons. */
   function enterReadThink(card) {
     rtPendingAdvance = false;
     rtButtonsActive = false;
@@ -313,8 +312,9 @@ export function mount(container) {
    * which iOS Safari's autoplay policy can silently drop — best-effort only.
    * The translation is always shown as text regardless, and "Nochmal
    * anhören" lets the user trigger it manually (a real tap) if the
-   * auto-speak didn't play. Once it finishes, the post-translation pause
-   * (enterReadThinkStopWindow) begins.
+   * auto-speak didn't play. Once it finishes, "Nochmal üben"/"Kannte ich"
+   * become active — there's no auto-advance; the round only continues once
+   * one of them is tapped.
    */
   function revealReadThink(card) {
     if (currentCard() !== card) return;
@@ -322,46 +322,26 @@ export function mount(container) {
     render();
     const items = [{ text: answerText(card), lang: answerLang() }];
     if (card.example) items.push({ text: card.example, lang: 'en' });
-    let windowEntered = false;
-    const enterWindowOnce = () => {
-      if (windowEntered) return;
-      windowEntered = true;
-      if (rtAutoAdvanceTimer) {
-        clearTimeout(rtAutoAdvanceTimer);
-        rtAutoAdvanceTimer = null;
+    let activated = false;
+    const activateButtonsOnce = () => {
+      if (activated) return;
+      activated = true;
+      if (rtActivateBackstopTimer) {
+        clearTimeout(rtActivateBackstopTimer);
+        rtActivateBackstopTimer = null;
       }
-      enterReadThinkStopWindow(card);
+      if (currentCard() !== card) return; // card changed while speech was playing
+      rtButtonsActive = true;
+      render();
     };
-    ttsService.speakSequence(items, enterWindowOnce);
+    ttsService.speakSequence(items, activateButtonsOnce);
     // Backstop in case none of the onend callbacks fire (speech silently dropped).
-    if (rtAutoAdvanceTimer) clearTimeout(rtAutoAdvanceTimer);
-    rtAutoAdvanceTimer = setTimeout(enterWindowOnce, TRANSLATION_SPEECH_BACKSTOP_MS);
-  }
-
-  /**
-   * The only window during which "Nochmal üben"/"Kannte ich" are active.
-   * Tapping either during it rates the card immediately (and advances);
-   * letting it run out counts the card as "kannte ich" automatically,
-   * matching Auto mode's same default for an unrated card.
-   */
-  function enterReadThinkStopWindow(card) {
-    if (currentCard() !== card) return;
-    rtButtonsActive = true;
-    render();
-    rtAutoAdvanceTimer = setTimeout(() => autoAdvanceReadThink(card), STOP_WINDOW_MS);
-  }
-
-  function autoAdvanceReadThink(card) {
-    if (currentCard() !== card) return;
-    if (rtAutoAdvanceTimer) {
-      clearTimeout(rtAutoAdvanceTimer);
-      rtAutoAdvanceTimer = null;
-    }
-    rateReadThink(true); // window ran out without a tap -> counts as "kannte ich" per Auto mode's same choice
+    if (rtActivateBackstopTimer) clearTimeout(rtActivateBackstopTimer);
+    rtActivateBackstopTimer = setTimeout(activateButtonsOnce, TRANSLATION_SPEECH_BACKSTOP_MS);
   }
 
   function rateReadThink(known) {
-    if (rtPendingAdvance) return; // already advanced (auto path and manual tap raced)
+    if (rtPendingAdvance) return; // guards against a double-tap advancing twice
     rtPendingAdvance = true;
     const card = currentCard();
     if (!card) return;

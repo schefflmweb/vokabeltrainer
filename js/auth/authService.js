@@ -13,10 +13,31 @@ function isConfigured() {
   return CLIENT_ID && CLIENT_ID !== 'REPLACE_WITH_YOUR_AZURE_APP_CLIENT_ID';
 }
 
+/**
+ * The MSAL script tag loads with `async` (see index.html) so a slow CDN
+ * fetch never blocks the app's own startup — but that means it may not have
+ * finished loading yet the first time init() runs. Polls briefly rather than
+ * failing immediately in that case.
+ */
+function waitForMsal(timeoutMs = 8000) {
+  if (typeof msal !== 'undefined') return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const check = () => {
+      if (typeof msal !== 'undefined') { resolve(true); return; }
+      if (Date.now() - start > timeoutMs) { resolve(false); return; }
+      setTimeout(check, 50);
+    };
+    check();
+  });
+}
+
 async function init() {
   if (initPromise) return initPromise;
   initPromise = (async () => {
-    if (!isConfigured() || typeof msal === 'undefined') return false;
+    if (!isConfigured()) return false;
+    const msalReady = await waitForMsal();
+    if (!msalReady) return false;
     msalInstance = new msal.PublicClientApplication(authConfig);
     await msalInstance.initialize();
     const result = await msalInstance.handleRedirectPromise().catch(() => null);

@@ -27,8 +27,12 @@ function setStatus(next) {
 }
 
 function authHeaders(token) {
+  // "token <PAT>" — the classic, universally-supported scheme for personal
+  // access tokens. "Bearer" is also documented for the REST API but is more
+  // associated with GitHub Apps/OAuth tokens; using "token" here removes any
+  // doubt for a plain PAT.
   return {
-    Authorization: `Bearer ${token}`,
+    Authorization: `token ${token}`,
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28'
   };
@@ -55,10 +59,21 @@ async function fetchWithRetry(url, options, attempt = 1) {
   }
 }
 
+/** Turns a non-ok response into a message that actually helps for the two most common causes (bad token, missing scope) instead of just a bare status code. */
+function httpErrorMessage(res, context) {
+  if (res.status === 401) {
+    return 'GitHub lehnt den Token ab (401) — bitte prüfen: vollständig kopiert (kein Leerzeichen/Zeilenumbruch abgeschnitten), noch nicht abgelaufen oder widerrufen, und als "classic" Token erstellt (nicht "fine-grained" — die unterstützen keine Gists).';
+  }
+  if (res.status === 403) {
+    return 'GitHub verweigert den Zugriff (403) — hat der Token die Berechtigung "gist"?';
+  }
+  return `${context} (${res.status})`;
+}
+
 /** Finds the gist created by a previous sync (on this or another device with the same token) rather than creating a duplicate every time localStorage doesn't already have the id cached. */
 async function findExistingGistId(token) {
   const res = await fetchWithRetry(`${API_BASE}/gists?per_page=100`, { headers: authHeaders(token) });
-  if (!res.ok) throw new Error(`GitHub-Abruf fehlgeschlagen (${res.status})`);
+  if (!res.ok) throw new Error(httpErrorMessage(res, 'GitHub-Abruf fehlgeschlagen'));
   const gists = await res.json();
   const match = gists.find((g) => g.description === GIST_DESCRIPTION);
   return match ? match.id : null;
@@ -76,7 +91,7 @@ async function createGist(token) {
     headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
     body: JSON.stringify({ description: GIST_DESCRIPTION, public: false, files })
   });
-  if (!res.ok) throw new Error(`Gist anlegen fehlgeschlagen (${res.status})`);
+  if (!res.ok) throw new Error(httpErrorMessage(res, 'Gist anlegen fehlgeschlagen'));
   const created = await res.json();
   return created.id;
 }
@@ -98,7 +113,7 @@ async function fetchGistFiles(token, gistId) {
     await githubAuth.setGistId('');
     throw new Error('Gist nicht gefunden — bitte erneut synchronisieren');
   }
-  if (!res.ok) throw new Error(`GitHub-Abruf fehlgeschlagen (${res.status})`);
+  if (!res.ok) throw new Error(httpErrorMessage(res, 'GitHub-Abruf fehlgeschlagen'));
   const gist = await res.json();
   const files = gist.files || {};
   await Promise.all(Object.values(files).map(async (file) => {
@@ -116,7 +131,7 @@ async function pushGistFiles(token, gistId, filesPayload) {
     headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
     body: JSON.stringify({ files: filesPayload })
   });
-  if (!res.ok) throw new Error(`GitHub-Speichern fehlgeschlagen (${res.status})`);
+  if (!res.ok) throw new Error(httpErrorMessage(res, 'GitHub-Speichern fehlgeschlagen'));
 }
 
 function parseRemoteRecords(file, field) {

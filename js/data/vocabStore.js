@@ -187,6 +187,21 @@ export const vocabStore = {
     await db.putAll(updated);
   },
 
+  /** How many entries are soft-deleted (tombstoned, not physically removed) right now — a diagnostic for "getAll() shows 0 but nothing was actually purged". */
+  async getDeletedCount() {
+    const all = await db.getAll();
+    return all.filter((v) => v.deleted).length;
+  },
+
+  /** Undoes removeAll()/remove(): un-tombstones every soft-deleted entry, bumping updatedAt so the restore also propagates through sync. Recovery path if "Alle löschen" ran unintentionally — nothing was ever physically purged. */
+  async restoreAllDeleted() {
+    const all = await db.getAll();
+    const now = Date.now();
+    const toRestore = all.filter((v) => v.deleted).map((v) => ({ ...v, deleted: false, updatedAt: now, dirty: true }));
+    await db.putAll(toRestore);
+    return toRestore.length;
+  },
+
   async markReviewed(id, known) {
     const record = await db.get(id);
     if (!record) return null;

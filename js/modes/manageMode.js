@@ -235,6 +235,7 @@ export function mount(container) {
     const dueToday = vocabCache.filter((v) => v.srs.dueDate <= now).length;
     const learned = vocabCache.filter((v) => v.srs.repetitions >= 2).length;
     const streak = await vocabStore.getStreak();
+    const deletedCount = await vocabStore.getDeletedCount();
 
     container.innerHTML = `
       <div class="manage-mode pad">
@@ -259,6 +260,13 @@ export function mount(container) {
             </div>
           </div>
         </section>
+
+        ${deletedCount > 0 ? `
+        <section class="account-box">
+          <h3><span class="icon-inline-wrap">${trashIcon}</span> Als gelöscht markierte Vokabeln gefunden</h3>
+          <p class="hint">${deletedCount} Vokabeln sind lokal als gelöscht markiert, aber nicht wirklich entfernt (z. B. durch "Alle Vokabeln löschen"). Falls das unabsichtlich war, kannst du sie hier wiederherstellen.</p>
+          <button class="btn btn-primary btn-with-icon" id="restore-deleted-btn"><span class="icon-inline-wrap">${checkCircleIcon}</span> ${deletedCount} Vokabeln wiederherstellen</button>
+        </section>` : ''}
 
         <section class="account-box" id="account-box"></section>
 
@@ -315,6 +323,12 @@ export function mount(container) {
 
         <p class="hint center-text app-version">App-Version ${APP_VERSION}</p>
       </div>`;
+
+    container.querySelector('#restore-deleted-btn')?.addEventListener('click', async () => {
+      const restored = await vocabStore.restoreAllDeleted();
+      syncService.sync();
+      render();
+    });
 
     container.querySelector('#add-form').addEventListener('submit', async (e) => {
       e.preventDefault();

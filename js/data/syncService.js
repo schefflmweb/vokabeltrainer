@@ -261,7 +261,11 @@ export const syncService = {
    * source of truth for the fresh gist.
    */
   async resetRemote() {
-    if (syncPromise) return syncPromise;
+    // Unlike sync()/scheduleSync(), never piggyback on an in-flight run —
+    // that could silently return a plain sync() (against the still-broken
+    // remote) instead of actually performing the reset the caller asked
+    // for. Wait for it to settle, then run the reset for real.
+    if (syncPromise) await syncPromise.catch(() => {});
     syncPromise = this._runReset().finally(() => {
       syncPromise = null;
     });

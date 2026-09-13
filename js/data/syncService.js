@@ -247,7 +247,7 @@ function collectRemoteRecords(files, baseFileName, field) {
   const records = [];
   for (const { name, file } of parts) {
     if (file?.truncated) {
-      throw new Error(`GitHub hat "${name}" beim Lesen gekürzt — Sync abgebrochen, um keine Daten zu verlieren. Vermutlich eine Datei von vor diesem Fix. Bitte auf dem Gerät mit den vollständigen Daten erneut synchronisieren; hilft das nicht, den Gist "Vokabeltrainer-Daten" auf gist.github.com löschen (die App legt beim nächsten Sync automatisch einen neuen an).`);
+      throw new Error(`GitHub hat "${name}" beim Lesen gekürzt — Sync abgebrochen, um keine Daten zu verlieren. Ein normaler Sync liest diesen alten, kaputten Stand immer wieder — bitte auf DIESEM Gerät (falls die Vokabeln hier vollständig/aktuell sind) den Button "Sync zurücksetzen" verwenden statt erneut "Jetzt synchronisieren", das baut den Gist komplett neu auf.`);
     }
     if (!file?.content) continue;
     try {

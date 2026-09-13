@@ -266,6 +266,20 @@ function chunkRecords(records) {
 }
 
 /**
+ * Builds the file content with one record per line rather than
+ * JSON.stringify()'s single unbroken line — repeatedly shrinking the target
+ * file size didn't stop new files from getting truncated, which points away
+ * from total byte size being the actual trigger and toward something like a
+ * max-line-length heuristic instead (plausible for a service that also
+ * truncates rendering of very long single lines, e.g. minified source).
+ * Still valid JSON: whitespace between tokens is ignored by JSON.parse().
+ */
+function formatChunkContent(field, chunk, savedAt) {
+  const items = chunk.map((record) => JSON.stringify(record)).join(',\n');
+  return `{"${field}":[\n${items}\n],"savedAt":${JSON.stringify(savedAt)}}`;
+}
+
+/**
  * Gathers every part file belonging to this collection (base + any .partN)
  * and concatenates their records — null if the collection has no files at
  * all yet (a brand-new gist). Throws rather than silently treating a
@@ -423,7 +437,7 @@ export const syncService = {
         const chunks = chunkRecords(merged);
         const savedAt = new Date().toISOString();
         chunks.forEach((chunk, i) => {
-          pushPayload[partFileName(baseFileName, i)] = { content: JSON.stringify({ [field]: chunk, savedAt }) };
+          pushPayload[partFileName(baseFileName, i)] = { content: formatChunkContent(field, chunk, savedAt) };
         });
         // Drop any leftover part files from a previous, larger sync (e.g. after "Alle löschen").
         const re = partFileRegex(baseFileName);

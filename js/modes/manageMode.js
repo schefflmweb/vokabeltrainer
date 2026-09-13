@@ -502,6 +502,29 @@ export function mount(container) {
     renderVoiceBox();
   }
 
+  /**
+   * Shows how many records on THIS device are still marked dirty (added or
+   * edited locally but not yet confirmed pushed to Firestore) — the "In der
+   * Cloud" count above already includes these unconfirmed local records
+   * (mergeFromRemote keeps any local record with no remote match), so a
+   * device that's stuck failing to push looks like it simply "has more"
+   * rather than "has unsynced" data. This makes that distinction visible
+   * instead of silently folding it into one ambiguous total.
+   */
+  async function updateUnsyncedText() {
+    const el = container.querySelector('#sync-unsynced-text');
+    if (!el) return;
+    const [vocabDirty, grammarDirty, idiomDirty] = await Promise.all([
+      vocabStore.getDirty(),
+      grammarStore.getDirty(),
+      idiomStore.getDirty()
+    ]);
+    const total = vocabDirty.length + grammarDirty.length + idiomDirty.length;
+    el.textContent = total > 0
+      ? `${total} Änderung(en) auf diesem Gerät noch nicht in der Cloud bestätigt (${vocabDirty.length} Vokabeln, ${grammarDirty.length} Grammatik, ${idiomDirty.length} Idioms).`
+      : 'Alle lokalen Änderungen sind in der Cloud bestätigt.';
+  }
+
   function renderAccountBox() {
     const box = container.querySelector('#account-box');
     if (!box) return;
@@ -513,6 +536,7 @@ export function mount(container) {
         ? `<p class="hint">Angemeldet als ${escapeHtml(firebaseAuth.getEmail())}</p>
            <p class="hint" id="sync-status-text">–</p>
            <p class="hint" id="sync-counts-text"></p>
+           <p class="hint" id="sync-unsynced-text"></p>
            <button class="btn btn-secondary" id="disconnect-btn">Trennen</button>
            <button class="btn btn-secondary" id="sync-now-btn">Jetzt synchronisieren</button>
            <button class="btn btn-secondary" id="full-resync-btn">Vollständig neu abrufen</button>
@@ -533,6 +557,7 @@ export function mount(container) {
       });
       box.querySelector('#sync-now-btn').addEventListener('click', () => syncService.sync());
       box.querySelector('#full-resync-btn').addEventListener('click', () => syncService.fullResync());
+      updateUnsyncedText();
     } else {
       box.querySelector('#login-form').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -562,6 +587,7 @@ export function mount(container) {
         const idiomN = status.counts.idioms ?? 0;
         countsEl.textContent = `In der Cloud: ${vocabN} Vokabeln, ${grammarN} Grammatikübungen, ${idiomN} Idioms`;
       }
+      if (status.state === 'synced' || status.state === 'error') updateUnsyncedText();
     });
   }
 

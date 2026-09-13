@@ -235,17 +235,32 @@ async function pushGistFiles(token, gistId, filesPayload) {
   }
 
   let truncated = [];
+  let lastVerifyFiles = {};
   for (let attempt = 0; attempt <= VERIFY_TRUNCATION_DELAYS_MS.length; attempt++) {
     await new Promise((r) => setTimeout(r, attempt === 0 ? 1500 : VERIFY_TRUNCATION_DELAYS_MS[attempt - 1]));
-    const verifyFiles = await fetchGistFiles(token, gistId);
-    truncated = Object.entries(verifyFiles).filter(([, file]) => file.truncated);
+    lastVerifyFiles = await fetchGistFiles(token, gistId);
+    truncated = Object.entries(lastVerifyFiles).filter(([, file]) => file.truncated);
     if (truncated.length === 0) break;
   }
   if (truncated.length > 0) {
-    // GitHub reports the file's real stored size on a truncated entry — logging
-    // it is the only way to find out what the actual threshold is, since it's
-    // not documented and repeatedly shrinking the target hasn't been enough.
-    const details = truncated.map(([name, file]) => `${name} (${file.size ?? '?'} Bytes gemeldet)`).join(', ');
+    // A per-file size limit alone stopped explaining the pattern once a file
+    // reported truncated (51091 bytes) that was already *under* the 50KB
+    // target — so this now also reports the running total across every file
+    // in the gist, in the same order the API lists them, to check whether
+    // it's really the combined size of the whole gist that matters instead.
+    let cumulative = 0;
+    const withOffsets = Object.entries(lastVerifyFiles).map(([name, file]) => {
+      const bytes = file.size ?? (file.content ? utf8ByteLength(file.content) : 0);
+      const startOffset = cumulative;
+      cumulative += bytes;
+      return { name, file, bytes, startOffset, endOffset: cumulative };
+    });
+    const totalGistBytes = cumulative;
+    const details = truncated.map(([name]) => {
+      const info = withOffsets.find((f) => f.name === name);
+      const receivedBytes = info.file.content ? utf8ByteLength(info.file.content) : 0;
+      return `${name} (${info.bytes} Bytes gemeldet, ${receivedBytes} Bytes tatsächlich erhalten, kumulativ ${info.startOffset}-${info.endOffset} von insgesamt ${totalGistBytes} Bytes im gesamten Gist)`;
+    }).join('; ');
     throw new Error(`GitHub hat beim Hochladen ${details} trotzdem gekürzt — bitte "Sync zurücksetzen" versuchen. Damit merkt dieses Gerät es sofort, statt dass es erst später auf einem anderen auffällt.`);
   }
 }
@@ -353,7 +368,18 @@ function collectRemoteRecords(files, baseFileName, field) {
   const records = [];
   for (const { name, file } of parts) {
     if (file?.truncated) {
-      throw new Error(`GitHub hat "${name}" (${file.size ?? '?'} Bytes gemeldet) beim Lesen gekürzt — Sync abgebrochen, um keine Daten zu verlieren. Ein normaler Sync liest diesen alten, kaputten Stand immer wieder — bitte auf DIESEM Gerät (falls die Vokabeln hier vollständig/aktuell sind) den Button "Sync zurücksetzen" verwenden statt erneut "Jetzt synchronisieren", das baut den Gist komplett neu auf.`);
+      // See the matching diagnostic in pushGistFiles(): also reports where
+      // this file sits in the gist's running byte total, to help tell a
+      // per-file limit apart from a whole-gist one.
+      let cumulative = 0;
+      let startOffset = 0;
+      for (const [otherName, otherFile] of Object.entries(files)) {
+        const bytes = otherFile.size ?? (otherFile.content ? utf8ByteLength(otherFile.content) : 0);
+        if (otherName === name) startOffset = cumulative;
+        cumulative += bytes;
+      }
+      const receivedBytes = file.content ? utf8ByteLength(file.content) : 0;
+      throw new Error(`GitHub hat "${name}" (${file.size ?? '?'} Bytes gemeldet, ${receivedBytes} Bytes tatsächlich erhalten, kumulativ ab ${startOffset} von insgesamt ${cumulative} Bytes im gesamten Gist) beim Lesen gekürzt — Sync abgebrochen, um keine Daten zu verlieren. Ein normaler Sync liest diesen alten, kaputten Stand immer wieder — bitte auf DIESEM Gerät (falls die Vokabeln hier vollständig/aktuell sind) den Button "Sync zurücksetzen" verwenden statt erneut "Jetzt synchronisieren", das baut den Gist komplett neu auf.`);
     }
     if (!file?.content) continue;
     try {

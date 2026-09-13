@@ -393,7 +393,7 @@ export function mount(container) {
   }
 
   function renderSelect() {
-    const ready = !!pendingQueue;
+    const ready = !!pendingQueue?.length;
     const voiceSupported = speechInputService.isSupported();
     container.innerHTML = `
       <div class="audio-mode pad center-text">
@@ -443,7 +443,7 @@ export function mount(container) {
   }
 
   function renderFinished() {
-    const ready = !!pendingQueue;
+    const ready = !!pendingQueue?.length;
     container.innerHTML = `
       <div class="audio-mode pad center">
         <h2 class="btn-with-icon"><span class="icon-inline-wrap icon-lg">${starIcon}</span> Runde fertig!</h2>

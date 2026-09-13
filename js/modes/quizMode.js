@@ -152,7 +152,7 @@ export function mount(container) {
   }
 
   function renderSelect() {
-    const rtReady = !!pendingQueue;
+    const rtReady = !!pendingQueue?.length;
     container.innerHTML = `
       <div class="quiz-mode pad center-text">
         <p class="hint">Was möchtest du üben?</p>
@@ -201,7 +201,7 @@ export function mount(container) {
   }
 
   function renderFinished() {
-    const rtReady = quizType !== 'readthink' || !!pendingQueue;
+    const rtReady = quizType !== 'readthink' || !!pendingQueue?.length;
     container.innerHTML = `
       <div class="quiz-mode pad center">
         <h2 class="btn-with-icon"><span class="icon-inline-wrap icon-lg">${starIcon}</span> Runde fertig!</h2>

@@ -23,6 +23,12 @@ function typeBadgeHtml(card) {
   return ` <span class="word-type-badge">${escapeHtml(card.type)}</span>`;
 }
 
+/** Example sentence shown once the card is resolved, for vocab and idioms alike — only when one exists. */
+function exampleHtml(card) {
+  if (!card.example) return '';
+  return `<p class="example-sentence">${escapeHtml(card.example)}</p>`;
+}
+
 export function mount(container) {
   let queue = [];
   let distractorSample = [];
@@ -265,6 +271,7 @@ export function mount(container) {
             }).join('')}
           </div>
           <p class="hint btn-with-icon"><span class="icon-inline-wrap">${correct ? checkCircleIcon : xCircleIcon}</span> ${correct ? 'Richtig!' : `Richtig wäre: ${escapeHtml(correctAnswer)}`}</p>
+          ${exampleHtml(card)}
         </div>
         <button class="btn btn-huge btn-compact btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap">${playIcon}</span></button>
       </div>`;
@@ -310,6 +317,7 @@ export function mount(container) {
         <div class="quiz-word">${escapeHtml(promptText(card))}${typeBadgeHtml(card)}</div>
         <p class="typing-answer ${correct ? 'correct' : 'incorrect'}">${escapeHtml(value) || '–'}</p>
         <p class="hint typing-result btn-with-icon"><span class="icon-inline-wrap">${correct ? checkCircleIcon : xCircleIcon}</span> ${correct ? 'Richtig!' : `Richtig wäre: ${escapeHtml(correctAnswer)}`}</p>
+        ${exampleHtml(card)}
         <button class="btn btn-huge btn-compact btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap">${playIcon}</span></button>
       </div>`;
     container.querySelector('#next-btn').addEventListener('click', next);
@@ -412,6 +420,7 @@ export function mount(container) {
           ${progressBarHtml(index, queue.length)}
           <div class="quiz-word">${escapeHtml(promptText(card))}${typeBadgeHtml(card)}</div>
           <p class="hint quiz-secondary ${rtRevealed ? '' : 'reveal-pending'}">${secondaryHtml}</p>
+          ${rtRevealed ? exampleHtml(card) : ''}
         </div>
         <button class="btn btn-secondary btn-with-icon" id="replay-btn"><span class="icon-inline-wrap">${speakerIcon}</span> Nochmal anhören</button>
         <div class="rate-buttons">

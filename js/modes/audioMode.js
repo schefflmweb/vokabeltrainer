@@ -32,6 +32,12 @@ function typeBadgeHtml(card) {
   return ` <span class="word-type-badge">${escapeHtml(card.type)}</span>`;
 }
 
+/** Example sentence shown once the card is resolved, for vocab and idioms alike — only when one exists. */
+function exampleHtml(card) {
+  if (!card.example) return '';
+  return `<p class="example-sentence">${escapeHtml(card.example)}</p>`;
+}
+
 export function mount(container) {
   let direction = 'en-de'; // 'en-de' | 'de-en'
   let interactionMode = 'tap'; // 'tap' | 'voice'
@@ -478,6 +484,7 @@ export function mount(container) {
         <div class="card-display">
           <div class="card-primary">${escapeHtml(primaryText(card))}${typeBadgeHtml(card)}</div>
           <div class="card-secondary ${tapRevealed ? '' : 'reveal-pending'}">${secondaryHtml}</div>
+          ${tapRevealed ? exampleHtml(card) : ''}
         </div>
         <button class="btn btn-secondary btn-with-icon" id="replay-btn"><span class="icon-inline-wrap">${speakerIcon}</span> Nochmal anhören</button>
         <button class="btn btn-huge btn-primary btn-with-icon" id="pause-btn" ${tapPauseState === 'disabled' ? 'disabled' : ''}>

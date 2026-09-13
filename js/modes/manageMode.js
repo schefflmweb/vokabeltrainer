@@ -306,10 +306,8 @@ export function mount(container) {
 
         <section>
           <h3>Alle Vokabeln löschen</h3>
-          <p class="hint">Löscht deine komplette Vokabelliste unwiderruflich (inkl. Lernfortschritt) — z. B. um danach nur eine eigene CSV frisch zu importieren.</p>
+          <p class="hint">Löscht deine komplette Vokabelliste unwiderruflich (inkl. Lernfortschritt) — z. B. um danach nur eine eigene CSV frisch zu importieren. Gilt wie jede andere Änderung auch für den Sync: Die Löschung wird zu allen verbundenen Geräten übertragen, sobald sie das nächste Mal synchronisieren.</p>
           <button class="btn btn-danger btn-with-icon" id="delete-all-btn"><span class="icon-inline-wrap">${trashIcon}</span> Alle Vokabeln löschen</button>
-          <p class="hint">Zeigt "Vokabeln gesamt" deutlich mehr an, als du je importiert hast (z. B. nach mehreren Sync-Fehlversuchen)? Dann hilft ein echter, kompletter lokaler Neustart — anders als oben werden dabei auch schon gelöschte Einträge komplett entfernt statt nur markiert, und es wird nichts davon synchronisiert. Danach auf diesem Gerät entweder frisch importieren oder ganz normal synchronisieren.</p>
-          <button class="btn btn-danger btn-with-icon" id="hard-reset-local-btn"><span class="icon-inline-wrap">${trashIcon}</span> Lokale Vokabeln komplett neu aufsetzen</button>
         </section>
 
         <section>
@@ -364,17 +362,6 @@ export function mount(container) {
       if (searchInput) searchInput.value = '';
       updateStatsUI();
       updateVocabListOnly();
-    });
-
-    container.querySelector('#hard-reset-local-btn').addEventListener('click', async () => {
-      if (!confirm(`Wirklich ALLE lokalen Vokabeln auf diesem Gerät endgültig entfernen (auch bereits gelöschte, nicht wiederherstellbar)? Nichts davon wird synchronisiert. Nur tun, wenn du die Vokabeln danach neu importierst oder von einem frisch aufgeräumten Cloud-Stand herunterlädst.`)) return;
-      await vocabStore.hardResetLocal();
-      vocabCache = [];
-      searchQuery = '';
-      visibleCount = VOCAB_PAGE_SIZE;
-      const searchInput = container.querySelector('#vocab-search');
-      if (searchInput) searchInput.value = '';
-      render();
     });
 
     container.querySelector('#csv-file').addEventListener('change', async (e) => {
@@ -454,8 +441,11 @@ export function mount(container) {
            <p class="hint" id="sync-counts-text"></p>
            <button class="btn btn-secondary" id="disconnect-btn">Trennen</button>
            <button class="btn btn-secondary" id="sync-now-btn">Jetzt synchronisieren</button>
-           <button class="btn btn-secondary" id="reset-sync-btn">Sync zurücksetzen</button>
-           <p class="hint">"Sync zurücksetzen" nur auf dem Gerät mit den vollständigen/aktuellen Vokabeln nutzen — löscht den Cloud-Stand und lädt ihn frisch von diesem Gerät neu hoch. Für "Sync klemmt mit einer Fehlermeldung über eine gekürzte Datei".</p>`
+           <details class="sync-advanced">
+             <summary>Notfall: Sync klemmt mit einer Fehlermeldung</summary>
+             <p class="hint">Betrifft NICHT deine Vokabeln — das hier baut nur den Cloud-Speicher neu auf, falls er in einem kaputten Zustand feststeckt (z. B. nach einer Fehlermeldung über eine gekürzte Datei) und normales Synchronisieren nicht mehr durchkommt. Nur auf dem Gerät nutzen, dessen Vokabeln gerade vollständig/aktuell sind — dieser Stand wird danach zur neuen Cloud-Version, andere Geräte übernehmen ihn beim nächsten Sync.</p>
+             <button class="btn btn-secondary" id="reset-sync-btn">Sync zurücksetzen</button>
+           </details>`
         : `<p class="hint">Vokabeln zwischen Geräten abgleichen — <a href="${tokenUrl}" target="_blank" rel="noopener">Token erstellen</a> (nur Berechtigung <code>gist</code> nötig) und hier einfügen.</p>
            <form id="token-form" class="add-form">
              <input type="password" id="token-input" placeholder="GitHub Personal Access Token" autocomplete="off" required />

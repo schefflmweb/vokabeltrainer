@@ -202,19 +202,6 @@ export const vocabStore = {
     return toRestore.length;
   },
 
-  /**
-   * Physically empties the local vocab store — unlike removeAll(), nothing
-   * is left as a tombstone, so it can't accidentally get pushed into a sync
-   * as a pile of delete-markers. For wiping a device's own bloated/
-   * duplicated local state (e.g. after several failed sync/import attempts
-   * left it with far more entries than were ever really added) before a
-   * fresh CSV import or a clean pull from a just-reset remote — never
-   * propagates anywhere on its own.
-   */
-  async hardResetLocal() {
-    await db.clearStore();
-  },
-
   async markReviewed(id, known) {
     const record = await db.get(id);
     if (!record) return null;

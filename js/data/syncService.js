@@ -376,14 +376,29 @@ export const syncService = {
         if (!res.ok && res.status !== 404) throw new Error(httpErrorMessage(res, 'Zurücksetzen fehlgeschlagen'));
       }
       await githubAuth.setGistId('');
+
+      // Create the fresh gist here, and hand it straight to _runSync()
+      // marked "known empty" — rather than letting resolveGistId() create
+      // it and then immediately trying to read it back. A GET right after
+      // a POST can 404 for several seconds (the same read-after-write lag
+      // seen elsewhere), and that immediate read is pointless here anyway:
+      // a gist this function just created has nothing in it to merge, so
+      // there's nothing lost by not reading it before the following push.
+      const gistId = await createGist(token);
+      await githubAuth.setGistId(gistId);
+      return this._runSync(gistId, true);
     } catch (err) {
       setStatus({ state: 'error', message: err.message || 'Zurücksetzen fehlgeschlagen' });
-      return;
     }
-    return this._runSync();
   },
 
-  async _runSync() {
+  /**
+   * gistId/knownEmpty let resetRemote() hand off a gist it just created
+   * without this needing to read it back first (see resetRemote's own
+   * comment) — omitted for a normal sync(), which always resolves/reads
+   * normally.
+   */
+  async _runSync(gistId, knownEmpty = false) {
     await githubAuth.ready();
     const token = githubAuth.getToken();
     if (!token) {
@@ -393,8 +408,8 @@ export const syncService = {
 
     setStatus({ state: 'syncing', message: 'Synchronisiere …' });
     try {
-      const gistId = await resolveGistId(token);
-      const files = await fetchGistFiles(token, gistId);
+      if (!gistId) gistId = await resolveGistId(token);
+      const files = knownEmpty ? {} : await fetchGistFiles(token, gistId);
 
       const pushPayload = {};
       const counts = {};

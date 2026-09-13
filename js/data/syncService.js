@@ -217,17 +217,19 @@ async function pushGistFiles(token, gistId, filesPayload) {
     await pushGistFilesOnce(token, gistId, batch);
   }
 
-  let truncatedNames = [];
+  let truncated = [];
   for (let attempt = 0; attempt <= VERIFY_TRUNCATION_DELAYS_MS.length; attempt++) {
     await new Promise((r) => setTimeout(r, attempt === 0 ? 1500 : VERIFY_TRUNCATION_DELAYS_MS[attempt - 1]));
     const verifyFiles = await fetchGistFiles(token, gistId);
-    truncatedNames = Object.entries(verifyFiles)
-      .filter(([, file]) => file.truncated)
-      .map(([name]) => name);
-    if (truncatedNames.length === 0) break;
+    truncated = Object.entries(verifyFiles).filter(([, file]) => file.truncated);
+    if (truncated.length === 0) break;
   }
-  if (truncatedNames.length > 0) {
-    throw new Error(`GitHub hat beim Hochladen ${truncatedNames.join(', ')} trotzdem gekürzt — bitte "Sync zurücksetzen" versuchen. Damit merkt dieses Gerät es sofort, statt dass es erst später auf einem anderen auffällt.`);
+  if (truncated.length > 0) {
+    // GitHub reports the file's real stored size on a truncated entry — logging
+    // it is the only way to find out what the actual threshold is, since it's
+    // not documented and repeatedly shrinking the target hasn't been enough.
+    const details = truncated.map(([name, file]) => `${name} (${file.size ?? '?'} Bytes gemeldet)`).join(', ');
+    throw new Error(`GitHub hat beim Hochladen ${details} trotzdem gekürzt — bitte "Sync zurücksetzen" versuchen. Damit merkt dieses Gerät es sofort, statt dass es erst später auf einem anderen auffällt.`);
   }
 }
 
@@ -244,6 +246,24 @@ const utf8Encoder = new TextEncoder();
 /** Actual UTF-8 byte length — JS string .length counts UTF-16 code units, which undercounts anything outside plain ASCII (ä/ö/ü/ß and friends all encode to 2+ bytes in UTF-8), so it understated real file size for German text and let chunks quietly grow past GitHub's real truncation threshold. */
 function utf8ByteLength(str) {
   return utf8Encoder.encode(str).length;
+}
+
+/**
+ * Finds the single largest record by serialized size, if any is suspiciously
+ * large. Truncation kept recurring on a different file across several
+ * rounds of shrinking the target file size and even splitting writes into
+ * smaller requests — which points away from an even distribution of normal-
+ * sized records and toward one (or a few) outliers, e.g. a record corrupted
+ * during one of many import/merge cycles, single-handedly blowing up
+ * whatever chunk it lands in regardless of how conservative the target is.
+ */
+function findOversizedRecord(records, thresholdBytes = 5000) {
+  let worst = null;
+  for (const record of records) {
+    const size = utf8ByteLength(JSON.stringify(record));
+    if (size > thresholdBytes && (!worst || size > worst.size)) worst = { size, record };
+  }
+  return worst;
 }
 
 /** Splits `records` into chunks that each stay under MAX_FILE_BYTES once JSON-serialized — always at least one chunk, even if empty, so the base file always exists. */
@@ -301,7 +321,7 @@ function collectRemoteRecords(files, baseFileName, field) {
   const records = [];
   for (const { name, file } of parts) {
     if (file?.truncated) {
-      throw new Error(`GitHub hat "${name}" beim Lesen gekürzt — Sync abgebrochen, um keine Daten zu verlieren. Ein normaler Sync liest diesen alten, kaputten Stand immer wieder — bitte auf DIESEM Gerät (falls die Vokabeln hier vollständig/aktuell sind) den Button "Sync zurücksetzen" verwenden statt erneut "Jetzt synchronisieren", das baut den Gist komplett neu auf.`);
+      throw new Error(`GitHub hat "${name}" (${file.size ?? '?'} Bytes gemeldet) beim Lesen gekürzt — Sync abgebrochen, um keine Daten zu verlieren. Ein normaler Sync liest diesen alten, kaputten Stand immer wieder — bitte auf DIESEM Gerät (falls die Vokabeln hier vollständig/aktuell sind) den Button "Sync zurücksetzen" verwenden statt erneut "Jetzt synchronisieren", das baut den Gist komplett neu auf.`);
     }
     if (!file?.content) continue;
     try {
@@ -434,6 +454,11 @@ export const syncService = {
         // deletion itself propagates, but they're not real entries — don't
         // count them for the "how many are actually on the gist" display.
         counts[field] = merged.filter((r) => !r.deleted).length;
+        const oversized = findOversizedRecord(merged);
+        if (oversized) {
+          const preview = (oversized.record.en || oversized.record.question || oversized.record.id || '').toString().slice(0, 60);
+          throw new Error(`Ein einzelner Eintrag in "${field}" ist auffällig groß (${Math.round(oversized.size / 1024)} KB — normal wären wenige hundert Bytes): "${preview}…". Das ist vermutlich die eigentliche Ursache der Kürzungs-Fehler. Bitte in Verwalten danach suchen und den Eintrag bearbeiten oder löschen.`);
+        }
         const chunks = chunkRecords(merged);
         const savedAt = new Date().toISOString();
         chunks.forEach((chunk, i) => {

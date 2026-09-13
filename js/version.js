@@ -7,4 +7,4 @@
  * since sw.js runs as a separate, non-module worker script and can't be
  * imported from here.
  */
-export const APP_VERSION = 'v32';
+export const APP_VERSION = 'v33';

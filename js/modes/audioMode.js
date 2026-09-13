@@ -24,7 +24,7 @@ const PRIMARY_SPEECH_BACKSTOP_MS = 4000;
 // Pause before jumping to the next card, once the translation has finished
 // being spoken — and the only window during which the Stopp/Weiter button
 // is active (see revealTranslation()/enterStopWindow()).
-const STOP_WINDOW_MS = 2500;
+const STOP_WINDOW_MS = 2000;
 
 export function mount(container) {
   let direction = 'en-de'; // 'en-de' | 'de-en'

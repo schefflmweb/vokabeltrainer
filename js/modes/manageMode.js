@@ -308,6 +308,8 @@ export function mount(container) {
           <h3>Alle Vokabeln löschen</h3>
           <p class="hint">Löscht deine komplette Vokabelliste unwiderruflich (inkl. Lernfortschritt) — z. B. um danach nur eine eigene CSV frisch zu importieren.</p>
           <button class="btn btn-danger btn-with-icon" id="delete-all-btn"><span class="icon-inline-wrap">${trashIcon}</span> Alle Vokabeln löschen</button>
+          <p class="hint">Zeigt "Vokabeln gesamt" deutlich mehr an, als du je importiert hast (z. B. nach mehreren Sync-Fehlversuchen)? Dann hilft ein echter, kompletter lokaler Neustart — anders als oben werden dabei auch schon gelöschte Einträge komplett entfernt statt nur markiert, und es wird nichts davon synchronisiert. Danach auf diesem Gerät entweder frisch importieren oder ganz normal synchronisieren.</p>
+          <button class="btn btn-danger btn-with-icon" id="hard-reset-local-btn"><span class="icon-inline-wrap">${trashIcon}</span> Lokale Vokabeln komplett neu aufsetzen</button>
         </section>
 
         <section>
@@ -362,6 +364,17 @@ export function mount(container) {
       if (searchInput) searchInput.value = '';
       updateStatsUI();
       updateVocabListOnly();
+    });
+
+    container.querySelector('#hard-reset-local-btn').addEventListener('click', async () => {
+      if (!confirm(`Wirklich ALLE lokalen Vokabeln auf diesem Gerät endgültig entfernen (auch bereits gelöschte, nicht wiederherstellbar)? Nichts davon wird synchronisiert. Nur tun, wenn du die Vokabeln danach neu importierst oder von einem frisch aufgeräumten Cloud-Stand herunterlädst.`)) return;
+      await vocabStore.hardResetLocal();
+      vocabCache = [];
+      searchQuery = '';
+      visibleCount = VOCAB_PAGE_SIZE;
+      const searchInput = container.querySelector('#vocab-search');
+      if (searchInput) searchInput.value = '';
+      render();
     });
 
     container.querySelector('#csv-file').addEventListener('change', async (e) => {

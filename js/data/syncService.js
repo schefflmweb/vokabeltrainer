@@ -93,13 +93,18 @@ function httpErrorMessage(res, context) {
   return `${context} (${res.status})`;
 }
 
-/** Finds the gist created by a previous sync (on this or another device with the same token) rather than creating a duplicate every time localStorage doesn't already have the id cached. */
-async function findExistingGistId(token) {
+/** Every gist matching our description — normally exactly one, but earlier races (two devices independently creating one before either found the other's) or repeated manual resets could have left more than one lying around. */
+async function findAllMatchingGistIds(token) {
   const res = await fetchWithRetry(`${API_BASE}/gists?per_page=100`, { headers: authHeaders(token) });
   if (!res.ok) throw new Error(httpErrorMessage(res, 'GitHub-Abruf fehlgeschlagen'));
   const gists = await res.json();
-  const match = gists.find((g) => g.description === GIST_DESCRIPTION);
-  return match ? match.id : null;
+  return gists.filter((g) => g.description === GIST_DESCRIPTION).map((g) => g.id);
+}
+
+/** Finds the gist created by a previous sync (on this or another device with the same token) rather than creating a duplicate every time localStorage doesn't already have the id cached. If more than one exists, picks the first found — resetRemote() is the way to clean up the rest. */
+async function findExistingGistId(token) {
+  const ids = await findAllMatchingGistIds(token);
+  return ids.length > 0 ? ids[0] : null;
 }
 
 async function createGist(token) {
@@ -281,10 +286,16 @@ export const syncService = {
     }
     setStatus({ state: 'syncing', message: 'Setze Sync zurück …' });
     try {
-      let gistId = githubAuth.getGistId();
-      if (!gistId) gistId = await findExistingGistId(token);
-      if (gistId) {
-        const res = await fetchWithRetry(`${API_BASE}/gists/${gistId}`, { method: 'DELETE', headers: authHeaders(token) });
+      // Delete every gist matching our description, not just the cached/first
+      // one — repeated resets or two devices once racing to create a gist
+      // independently can leave more than one lying around, and finding a
+      // DIFFERENT stray (still-broken) one on a later sync is exactly what
+      // made this keep failing after a reset that looked like it worked.
+      const ids = new Set(await findAllMatchingGistIds(token));
+      const cached = githubAuth.getGistId();
+      if (cached) ids.add(cached);
+      for (const id of ids) {
+        const res = await fetchWithRetry(`${API_BASE}/gists/${id}`, { method: 'DELETE', headers: authHeaders(token) });
         if (!res.ok && res.status !== 404) throw new Error(httpErrorMessage(res, 'Zurücksetzen fehlgeschlagen'));
       }
       await githubAuth.setGistId('');

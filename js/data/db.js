@@ -82,6 +82,12 @@ export const db = {
     return wrapRequest(store.count());
   },
 
+  /** Physically empties a store — unlike a soft-delete (deleted: true), nothing is left behind to sync/restore. For clearing a device's own bloated/duplicated local state, not for anything that should propagate as a deletion elsewhere. */
+  async clearStore(storeName = STORE_VOCAB) {
+    const store = await tx(storeName, 'readwrite');
+    return wrapRequest(store.clear());
+  },
+
   /**
    * Reads up to `cap` records from `indexName` whose key falls in `range`,
    * starting at a random position within that range — avoids deserializing

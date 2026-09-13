@@ -25,6 +25,11 @@ function tag(items, store) {
   return items.map((item) => ({ ...item, __store: store }));
 }
 
+/** True if a card returned by getDueFromSource()/getSampleFromSource() came from the vocab store rather than idioms — lets callers show vocab-only details (e.g. word type) without importing vocabStore themselves just for the identity check. */
+export function isVocabCard(card) {
+  return card.__store === vocabStore;
+}
+
 export async function getDueFromSource(source, limit, now = Date.now()) {
   const stores = storesFor(source);
   if (stores.length === 1) {

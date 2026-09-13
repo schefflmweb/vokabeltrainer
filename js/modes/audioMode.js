@@ -1,5 +1,5 @@
 import { ttsService } from '../tts/ttsService.js';
-import { PRACTICE_SOURCES, getDueFromSource } from '../data/practicePool.js';
+import { PRACTICE_SOURCES, getDueFromSource, isVocabCard } from '../data/practicePool.js';
 import { syncService } from '../data/syncService.js';
 import { speechInputService } from '../stt/speechInputService.js';
 import { toneService } from '../audio/toneService.js';
@@ -25,6 +25,12 @@ const PRIMARY_SPEECH_BACKSTOP_MS = 4000;
 // being spoken — and the only window during which the Stopp/Weiter button
 // is active (see revealTranslation()/enterStopWindow()).
 const STOP_WINDOW_MS = 2000;
+
+/** Word type (Nomen/Verb/...) shown next to the displayed word — vocab only, display-only (never spoken, see primaryText()/ttsService calls). */
+function typeBadgeHtml(card) {
+  if (!isVocabCard(card) || !card.type) return '';
+  return ` <span class="word-type-badge">${escapeHtml(card.type)}</span>`;
+}
 
 export function mount(container) {
   let direction = 'en-de'; // 'en-de' | 'de-en'
@@ -470,7 +476,7 @@ export function mount(container) {
       <div class="audio-mode">
         ${progressBarHtml(index, queue.length)}
         <div class="card-display">
-          <div class="card-primary">${escapeHtml(primaryText(card))}</div>
+          <div class="card-primary">${escapeHtml(primaryText(card))}${typeBadgeHtml(card)}</div>
           <div class="card-secondary ${tapRevealed ? '' : 'reveal-pending'}">${secondaryHtml}</div>
         </div>
         <button class="btn btn-secondary btn-with-icon" id="replay-btn"><span class="icon-inline-wrap">${speakerIcon}</span> Nochmal anhören</button>
@@ -491,7 +497,7 @@ export function mount(container) {
         <div class="audio-mode">
           ${progressBarHtml(index, queue.length)}
           <div class="card-display">
-            <div class="card-primary">${escapeHtml(primaryText(card))}</div>
+            <div class="card-primary">${escapeHtml(primaryText(card))}${typeBadgeHtml(card)}</div>
           </div>
           <p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap icon-lg">${speakerIcon}</span> Wort wird vorgelesen …</p>
         </div>`;
@@ -503,7 +509,7 @@ export function mount(container) {
         <div class="audio-mode">
           ${progressBarHtml(index, queue.length)}
           <div class="card-display">
-            <div class="card-primary">${escapeHtml(primaryText(card))}</div>
+            <div class="card-primary">${escapeHtml(primaryText(card))}${typeBadgeHtml(card)}</div>
           </div>
           <p class="hint mic-status btn-with-icon"><span class="icon-inline-wrap icon-lg">${micIcon}</span> Höre zu … jetzt sprechen!</p>
           <button class="btn btn-secondary btn-with-icon" id="skip-btn"><span class="icon-inline-wrap">${skipIcon}</span> Überspringen</button>
@@ -517,7 +523,7 @@ export function mount(container) {
         <div class="audio-mode">
           ${progressBarHtml(index, queue.length)}
           <div class="card-display">
-            <div class="card-primary">${escapeHtml(primaryText(card))}</div>
+            <div class="card-primary">${escapeHtml(primaryText(card))}${typeBadgeHtml(card)}</div>
           </div>
           <p class="hint btn-with-icon"><span class="icon-inline-wrap">${errorIcon}</span> ${escapeHtml(voiceErrorMessage)}</p>
           <button class="btn btn-secondary btn-with-icon" id="retry-btn"><span class="icon-inline-wrap">${micIcon}</span> Erneut versuchen</button>
@@ -535,7 +541,7 @@ export function mount(container) {
       <div class="audio-mode">
         ${progressBarHtml(index, queue.length)}
         <div class="card-display ${correct ? 'pulse-correct' : 'shake-incorrect'}">
-          <div class="card-primary">${escapeHtml(primaryText(card))}</div>
+          <div class="card-primary">${escapeHtml(primaryText(card))}${typeBadgeHtml(card)}</div>
         </div>
         <p class="typing-answer ${correct ? 'correct' : 'incorrect'}">${escapeHtml(transcript) || '(keine Antwort erkannt)'}</p>
         <p class="hint btn-with-icon"><span class="icon-inline-wrap">${resultIcon}</span> ${correct ? 'Richtig!' : `Richtig wäre: ${escapeHtml(expected)}`}</p>

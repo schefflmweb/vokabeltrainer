@@ -36,6 +36,21 @@ const MAX_FILE_BYTES = 50 * 1024;
  */
 const MAX_PATCH_BYTES = 150 * 1024;
 
+/**
+ * A truncation error on a real device's gist reported the exact cutoff
+ * point: content stopped after 921600 bytes cumulative across the gist's
+ * files, in listing order — 900 * 1024, suspiciously exact. That lines up
+ * with everything observed: per-file size never mattered (files well under
+ * every target tried, including one already under 50KB, still got cut),
+ * only the running total across ALL of a gist's files did, with whichever
+ * file straddled that point coming back truncated mid-content. So instead
+ * of chasing per-file size, the data is now split across as many separate
+ * gists as needed, each kept safely under this — comfortably below 900KiB,
+ * leaving real margin instead of grazing the edge again as the vocab list
+ * grows further.
+ */
+const MAX_GIST_BYTES = 600 * 1024;
+
 /** Each collection's records are stored as `<baseFileName>.json`, `<baseFileName>.part1.json`, `<baseFileName>.part2.json`, ... as needed. */
 const COLLECTIONS = [
   { store: vocabStore, baseFileName: 'vocab-data', field: 'vocab' },
@@ -114,36 +129,15 @@ async function findAllMatchingGistIds(token) {
   return gists.filter((g) => g.description === GIST_DESCRIPTION).map((g) => g.id);
 }
 
-/** Finds the gist created by a previous sync (on this or another device with the same token) rather than creating a duplicate every time localStorage doesn't already have the id cached. If more than one exists, picks the first found — resetRemote() is the way to clean up the rest. */
-async function findExistingGistId(token) {
-  const ids = await findAllMatchingGistIds(token);
-  return ids.length > 0 ? ids[0] : null;
-}
-
-async function createGist(token) {
-  const files = Object.fromEntries(
-    COLLECTIONS.map(({ baseFileName, field }) => [
-      partFileName(baseFileName, 0),
-      { content: JSON.stringify({ [field]: [], savedAt: new Date().toISOString() }) }
-    ])
-  );
+async function createGistShard(token, filesPayload) {
   const res = await fetchWithRetry(`${API_BASE}/gists`, {
     method: 'POST',
     headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ description: GIST_DESCRIPTION, public: false, files })
+    body: JSON.stringify({ description: GIST_DESCRIPTION, public: false, files: filesPayload })
   });
   if (!res.ok) throw new Error(httpErrorMessage(res, 'Gist anlegen fehlgeschlagen'));
   const created = await res.json();
   return created.id;
-}
-
-async function resolveGistId(token) {
-  const cached = githubAuth.getGistId();
-  if (cached) return cached;
-  const found = await findExistingGistId(token);
-  const id = found || await createGist(token);
-  await githubAuth.setGistId(id);
-  return id;
 }
 
 /**
@@ -151,9 +145,7 @@ async function resolveGistId(token) {
  * pushGistFiles's own verification read) can be GitHub's read path not yet
  * reflecting a write that only just happened, not the gist actually being
  * gone — so a lone immediate 404 is retried a couple of times with a short
- * delay before it's treated as real. A 404 that persists past that (e.g.
- * the gist was genuinely deleted on github.com) still drops the cached id
- * so the next sync creates/finds a fresh one instead of failing forever.
+ * delay before it's treated as real.
  */
 const GIST_404_RETRY_DELAYS_MS = [700, 1500, 2500, 4000];
 
@@ -164,12 +156,79 @@ async function fetchGistFiles(token, gistId, attempt = 0) {
       await new Promise((r) => setTimeout(r, GIST_404_RETRY_DELAYS_MS[attempt]));
       return fetchGistFiles(token, gistId, attempt + 1);
     }
-    await githubAuth.setGistId('');
     throw new Error('Gist nicht gefunden — bitte erneut synchronisieren');
   }
   if (!res.ok) throw new Error(httpErrorMessage(res, 'GitHub-Abruf fehlgeschlagen'));
   const gist = await res.json();
   return gist.files || {};
+}
+
+/**
+ * The data now lives across however many gists (all sharing the same
+ * description) are needed to stay under MAX_GIST_BYTES each — reads every
+ * one and keeps track of which files came from which gist, so a later write
+ * can tell which stale filenames to clear out of which specific shard.
+ */
+async function fetchAllShardFiles(token, gistIds) {
+  const shardFiles = new Map();
+  for (const gistId of gistIds) {
+    shardFiles.set(gistId, await fetchGistFiles(token, gistId));
+  }
+  const merged = {};
+  for (const filesObj of shardFiles.values()) Object.assign(merged, filesObj);
+  return { shardFiles, merged };
+}
+
+/** Packs a full files payload into batches that each stay under MAX_GIST_BYTES — one batch per gist shard. Always at least one batch, even if empty, so a shard exists for a brand-new sync. */
+function distributeIntoShards(filesPayload) {
+  const entries = Object.entries(filesPayload).filter(([, val]) => val);
+  const shards = [];
+  let current = {};
+  let currentBytes = 0;
+  for (const [name, val] of entries) {
+    const bytes = utf8ByteLength(val.content);
+    if (Object.keys(current).length > 0 && currentBytes + bytes > MAX_GIST_BYTES) {
+      shards.push(current);
+      current = {};
+      currentBytes = 0;
+    }
+    current[name] = val;
+    currentBytes += bytes;
+  }
+  if (Object.keys(current).length > 0 || shards.length === 0) shards.push(current);
+  return shards;
+}
+
+/**
+ * Writes the full files payload across shard gists: reuses existing shard
+ * ids in order (clearing out any filename that used to live in that shard
+ * but isn't part of its new batch — e.g. because chunk boundaries shifted
+ * and it now belongs to a different shard), creates new shard gists if the
+ * data grew past what the existing ones can hold, and deletes any shard
+ * gists left over if it shrank.
+ */
+async function pushShardedGistFiles(token, gistIds, shardFilesBefore, filesPayload) {
+  const shardBatches = distributeIntoShards(filesPayload);
+  const resultGistIds = [];
+  for (let i = 0; i < shardBatches.length; i++) {
+    const batch = { ...shardBatches[i] };
+    if (i < gistIds.length) {
+      const gistId = gistIds[i];
+      const previousNames = Object.keys(shardFilesBefore.get(gistId) || {});
+      for (const name of previousNames) {
+        if (!(name in batch)) batch[name] = null;
+      }
+      await pushGistFiles(token, gistId, batch);
+      resultGistIds.push(gistId);
+    } else {
+      resultGistIds.push(await createGistShard(token, batch));
+    }
+  }
+  for (let i = shardBatches.length; i < gistIds.length; i++) {
+    const res = await fetchWithRetry(`${API_BASE}/gists/${gistIds[i]}`, { method: 'DELETE', headers: authHeaders(token) });
+    if (!res.ok && res.status !== 404) throw new Error(httpErrorMessage(res, 'Aufräumen fehlgeschlagen'));
+  }
+  return resultGistIds;
 }
 
 const VERIFY_TRUNCATION_DELAYS_MS = [2000, 2000, 3000];
@@ -379,7 +438,7 @@ function collectRemoteRecords(files, baseFileName, field) {
         cumulative += bytes;
       }
       const receivedBytes = file.content ? utf8ByteLength(file.content) : 0;
-      throw new Error(`GitHub hat "${name}" (${file.size ?? '?'} Bytes gemeldet, ${receivedBytes} Bytes tatsächlich erhalten, kumulativ ab ${startOffset} von insgesamt ${cumulative} Bytes im gesamten Gist) beim Lesen gekürzt — Sync abgebrochen, um keine Daten zu verlieren. Ein normaler Sync liest diesen alten, kaputten Stand immer wieder — bitte auf DIESEM Gerät (falls die Vokabeln hier vollständig/aktuell sind) den Button "Sync zurücksetzen" verwenden statt erneut "Jetzt synchronisieren", das baut den Gist komplett neu auf.`);
+      throw new Error(`GitHub hat "${name}" (${file.size ?? '?'} Bytes gemeldet, ${receivedBytes} Bytes tatsächlich erhalten, kumulativ ab ${startOffset} von insgesamt ${cumulative} Bytes im gesamten Datenbestand) beim Lesen gekürzt — Sync abgebrochen, um keine Daten zu verlieren. Ein normaler Sync liest diesen alten, kaputten Stand immer wieder — bitte auf DIESEM Gerät (falls die Vokabeln hier vollständig/aktuell sind) den Button "Sync zurücksetzen" verwenden statt erneut "Jetzt synchronisieren", das baut den Gist komplett neu auf.`);
     }
     if (!file?.content) continue;
     try {
@@ -425,14 +484,14 @@ export const syncService = {
   },
 
   /**
-   * Deletes the remote gist (if one exists) and lets the next sync create a
-   * fresh one from scratch — the escape hatch for a gist stuck in a state
-   * no sync can read past (e.g. a truncated file from before this app
-   * version), since every sync must successfully read before it can write,
-   * so a broken remote otherwise blocks every device equally, including the
-   * one with complete, correct local data. Only ever run this on the device
-   * whose local data is actually complete/current — it becomes the new
-   * source of truth for the fresh gist.
+   * Deletes every remote gist shard (if any exist) and lets the next sync
+   * create fresh ones from scratch — the escape hatch for a shard stuck in
+   * a state no sync can read past (e.g. a truncated file from before this
+   * app version), since every sync must successfully read before it can
+   * write, so a broken remote otherwise blocks every device equally,
+   * including the one with complete, correct local data. Only ever run this
+   * on the device whose local data is actually complete/current — it
+   * becomes the new source of truth for the fresh gist(s).
    */
   async resetRemote() {
     // Unlike sync()/scheduleSync(), never piggyback on an in-flight run —
@@ -455,42 +514,25 @@ export const syncService = {
     }
     setStatus({ state: 'syncing', message: 'Setze Sync zurück …' });
     try {
-      // Delete every gist matching our description, not just the cached/first
-      // one — repeated resets or two devices once racing to create a gist
-      // independently can leave more than one lying around, and finding a
-      // DIFFERENT stray (still-broken) one on a later sync is exactly what
-      // made this keep failing after a reset that looked like it worked.
-      const ids = new Set(await findAllMatchingGistIds(token));
-      const cached = githubAuth.getGistId();
-      if (cached) ids.add(cached);
+      // Delete every gist matching our description, however many shards
+      // that turns out to be — repeated resets, races between devices, or
+      // a data set that once needed more shards than it does now can all
+      // leave extras lying around.
+      const ids = await findAllMatchingGistIds(token);
       for (const id of ids) {
         const res = await fetchWithRetry(`${API_BASE}/gists/${id}`, { method: 'DELETE', headers: authHeaders(token) });
         if (!res.ok && res.status !== 404) throw new Error(httpErrorMessage(res, 'Zurücksetzen fehlgeschlagen'));
       }
-      await githubAuth.setGistId('');
-
-      // Create the fresh gist here, and hand it straight to _runSync()
-      // marked "known empty" — rather than letting resolveGistId() create
-      // it and then immediately trying to read it back. A GET right after
-      // a POST can 404 for several seconds (the same read-after-write lag
-      // seen elsewhere), and that immediate read is pointless here anyway:
-      // a gist this function just created has nothing in it to merge, so
-      // there's nothing lost by not reading it before the following push.
-      const gistId = await createGist(token);
-      await githubAuth.setGistId(gistId);
-      return this._runSync(gistId, true);
+      // Hand _runSync an empty shard list directly instead of letting it
+      // look them up again — nothing to find right after deleting them all.
+      return this._runSync([]);
     } catch (err) {
       setStatus({ state: 'error', message: err.message || 'Zurücksetzen fehlgeschlagen' });
     }
   },
 
-  /**
-   * gistId/knownEmpty let resetRemote() hand off a gist it just created
-   * without this needing to read it back first (see resetRemote's own
-   * comment) — omitted for a normal sync(), which always resolves/reads
-   * normally.
-   */
-  async _runSync(gistId, knownEmpty = false) {
+  /** knownGistIds lets resetRemote() skip the lookup right after deleting everything — omitted for a normal sync(), which always looks up the current shards fresh. */
+  async _runSync(knownGistIds) {
     await githubAuth.ready();
     const token = githubAuth.getToken();
     if (!token) {
@@ -500,8 +542,10 @@ export const syncService = {
 
     setStatus({ state: 'syncing', message: 'Synchronisiere …' });
     try {
-      if (!gistId) gistId = await resolveGistId(token);
-      const files = knownEmpty ? {} : await fetchGistFiles(token, gistId);
+      const gistIds = knownGistIds !== undefined ? knownGistIds : await findAllMatchingGistIds(token);
+      const { shardFiles, merged: files } = gistIds.length > 0
+        ? await fetchAllShardFiles(token, gistIds)
+        : { shardFiles: new Map(), merged: {} };
 
       const pushPayload = {};
       const counts = {};
@@ -522,13 +566,11 @@ export const syncService = {
         chunks.forEach((chunk, i) => {
           pushPayload[partFileName(baseFileName, i)] = { content: formatChunkContent(field, chunk, savedAt) };
         });
-        // Drop any leftover part files from a previous, larger sync (e.g. after "Alle löschen").
-        const re = partFileRegex(baseFileName);
-        for (const name of Object.keys(files)) {
-          if (re.test(name) && !(name in pushPayload)) pushPayload[name] = null;
-        }
       }
-      await pushGistFiles(token, gistId, pushPayload);
+      // pushShardedGistFiles clears any filename that no longer appears in
+      // pushPayload out of whichever shard it used to live in, so there's
+      // no separate "drop leftover files" pass needed here.
+      await pushShardedGistFiles(token, gistIds, shardFiles, pushPayload);
 
       for (const { store } of COLLECTIONS) {
         const dirty = await store.getDirty();

@@ -17,9 +17,7 @@
 import { db } from '../data/db.js';
 
 const TOKEN_META_KEY = 'githubToken';
-const GIST_ID_META_KEY = 'githubGistId';
 const TOKEN_LS_KEY = 'vocab-github-pat';
-const GIST_ID_LS_KEY = 'vocab-github-gist-id';
 
 function readLocalStorage(key) {
   try { return localStorage.getItem(key) || ''; } catch { return ''; }
@@ -35,21 +33,19 @@ function writeLocalStorage(key, value) {
 }
 
 let tokenCache = '';
-let gistIdCache = '';
 let loadPromise = null;
 
 async function load() {
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
-    const [dbToken, dbGistId] = await Promise.all([db.getMeta(TOKEN_META_KEY), db.getMeta(GIST_ID_META_KEY)]);
+    const dbToken = await db.getMeta(TOKEN_META_KEY);
     tokenCache = dbToken || readLocalStorage(TOKEN_LS_KEY) || '';
-    gistIdCache = dbGistId || readLocalStorage(GIST_ID_LS_KEY) || '';
   })();
   return loadPromise;
 }
 
 export const githubAuth = {
-  /** Must resolve before isConfigured()/getToken()/getGistId() are trustworthy — call once before first use (see manageMode.js/syncService.js). */
+  /** Must resolve before isConfigured()/getToken() are trustworthy — call once before first use (see manageMode.js/syncService.js). */
   async ready() {
     await load();
   },
@@ -81,24 +77,10 @@ export const githubAuth = {
     }
   },
 
-  /** The gist syncService reads/writes to, once found or created — cached so repeat syncs don't have to search for it every time. */
-  getGistId() {
-    return gistIdCache;
-  },
-
-  async setGistId(id) {
-    await load();
-    gistIdCache = id;
-    writeLocalStorage(GIST_ID_LS_KEY, id);
-    await db.setMeta(GIST_ID_META_KEY, id);
-  },
-
   async disconnect() {
     await load();
     tokenCache = '';
-    gistIdCache = '';
     writeLocalStorage(TOKEN_LS_KEY, '');
-    writeLocalStorage(GIST_ID_LS_KEY, '');
-    await Promise.all([db.setMeta(TOKEN_META_KEY, ''), db.setMeta(GIST_ID_META_KEY, '')]);
+    await db.setMeta(TOKEN_META_KEY, '');
   }
 };

@@ -74,7 +74,16 @@ if (refreshBtn) {
       // Fall through to reload regardless — worst case the old cache stays,
       // same as before the tap.
     }
-    location.reload();
+    // A plain reload() can still be answered from the browser's own HTTP
+    // cache (separate from the Cache Storage API just cleared above) —
+    // navigating to a URL with a fresh, never-seen-before query string
+    // forces the document itself past that cache. The service worker's own
+    // precache fetches are now cache-busted the same way (see sw.js), so
+    // between the two this should no longer need a full browser restart to
+    // actually pick up a new version.
+    const url = new URL(location.href);
+    url.searchParams.set('_refresh', Date.now().toString());
+    location.href = url.toString();
   });
 }
 

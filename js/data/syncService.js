@@ -165,14 +165,20 @@ async function fetchGistFiles(token, gistId, attempt = 0) {
   return gist.files || {};
 }
 
+const VERIFY_TRUNCATION_DELAYS_MS = [2000, 2000, 3000];
+
 /**
  * Pushes files, then does a genuine, separate GET to verify none of them
  * come back truncated — the PATCH response's own echoed file list turned
  * out not to reflect real truncation (a file could look fine right in the
- * PATCH response and still show up truncated on the very next plain read,
- * on this device or another), so only an actual follow-up GET can be
- * trusted. Costs one extra request per sync, but catches an oversized
- * chunk on the device that wrote it instead of only ever surfacing later.
+ * PATCH response and still show up truncated on the very next plain read),
+ * so only an actual follow-up GET can be trusted. Even that isn't
+ * necessarily final right away, though — the same kind of read-after-write
+ * lag that makes a GET 404 right after a gist is created can, it seems,
+ * also affect whether GitHub has finished deciding a just-written file
+ * needs to be truncated. So this waits a little before checking, and if it
+ * does find something truncated, waits and checks again a few times before
+ * concluding it's real — favoring a slower sync over a false alarm.
  */
 async function pushGistFiles(token, gistId, filesPayload) {
   const res = await fetchWithRetry(`${API_BASE}/gists/${gistId}`, {
@@ -182,10 +188,15 @@ async function pushGistFiles(token, gistId, filesPayload) {
   });
   if (!res.ok) throw new Error(httpErrorMessage(res, 'GitHub-Speichern fehlgeschlagen'));
 
-  const verifyFiles = await fetchGistFiles(token, gistId);
-  const truncatedNames = Object.entries(verifyFiles)
-    .filter(([, file]) => file.truncated)
-    .map(([name]) => name);
+  let truncatedNames = [];
+  for (let attempt = 0; attempt <= VERIFY_TRUNCATION_DELAYS_MS.length; attempt++) {
+    await new Promise((r) => setTimeout(r, attempt === 0 ? 1500 : VERIFY_TRUNCATION_DELAYS_MS[attempt - 1]));
+    const verifyFiles = await fetchGistFiles(token, gistId);
+    truncatedNames = Object.entries(verifyFiles)
+      .filter(([, file]) => file.truncated)
+      .map(([name]) => name);
+    if (truncatedNames.length === 0) break;
+  }
   if (truncatedNames.length > 0) {
     throw new Error(`GitHub hat beim Hochladen ${truncatedNames.join(', ')} trotzdem gekürzt — bitte "Sync zurücksetzen" versuchen. Damit merkt dieses Gerät es sofort, statt dass es erst später auf einem anderen auffällt.`);
   }

@@ -185,28 +185,44 @@ async function pushGistFilesOnce(token, gistId, batchPayload) {
 
 /**
  * Pushes files — split across several smaller PATCH requests if the total
- * would exceed MAX_PATCH_BYTES, in case it's the size of one whole write
- * rather than any individual file that matters — then does a genuine,
- * separate GET to verify none of them come back truncated. The PATCH
- * response's own echoed file list turned out not to reflect real
- * truncation (a file could look fine right in a PATCH response and still
- * show up truncated on the very next plain read), so only an actual
- * follow-up GET can be trusted. Even that isn't necessarily final right
- * away, though — the same kind of read-after-write lag that makes a GET
- * 404 right after a gist is created can, it seems, also affect whether
- * GitHub has finished deciding a just-written file needs to be truncated.
- * So this waits a little before checking, and if it does find something
- * truncated, waits and checks again a few times before concluding it's
- * real — favoring a slower sync over a false alarm.
+ * would exceed MAX_PATCH_BYTES — then does a genuine, separate GET to
+ * verify none of them come back truncated.
+ *
+ * A file reported truncated at just ~51KB (barely over the 50KB target,
+ * itself already shrunk down from 800KB→200KB in earlier attempts that
+ * didn't help either) ruled out file/request size as the actual cause.
+ * What's stayed consistent across every attempt is firing several PATCH
+ * requests at the same gist back-to-back with no gap between them — so the
+ * working theory now is that GitHub's backend needs a moment to fully
+ * settle one write to a gist before the next one lands cleanly, and without
+ * that gap a later write in the sequence (consistently the ~9th-10th
+ * request) can come out corrupted/truncated. Each batch now waits before
+ * the next one is sent.
+ *
+ * Separately, the PATCH response's own echoed file list turned out not to
+ * reflect real truncation (a file could look fine right in a PATCH response
+ * and still show up truncated on the very next plain read), so only an
+ * actual follow-up GET can be trusted — and even that isn't necessarily
+ * final right away, the same kind of lag that makes a GET 404 right after a
+ * gist is created can, it seems, also affect whether GitHub has finished
+ * deciding a just-written file needs to be truncated. So this waits before
+ * checking, and if it does find something truncated, waits and checks again
+ * a few times before concluding it's real — favoring a slower sync over a
+ * false alarm.
  */
+const BETWEEN_BATCH_DELAY_MS = 1200;
+
 async function pushGistFiles(token, gistId, filesPayload) {
   const entries = Object.entries(filesPayload);
   let batch = {};
   let batchBytes = 0;
+  let batchesSent = 0;
   for (const [name, val] of entries) {
     const entryBytes = val ? utf8ByteLength(val.content) : 0;
     if (Object.keys(batch).length > 0 && batchBytes + entryBytes > MAX_PATCH_BYTES) {
+      if (batchesSent > 0) await new Promise((r) => setTimeout(r, BETWEEN_BATCH_DELAY_MS));
       await pushGistFilesOnce(token, gistId, batch);
+      batchesSent++;
       batch = {};
       batchBytes = 0;
     }
@@ -214,6 +230,7 @@ async function pushGistFiles(token, gistId, filesPayload) {
     batchBytes += entryBytes;
   }
   if (Object.keys(batch).length > 0) {
+    if (batchesSent > 0) await new Promise((r) => setTimeout(r, BETWEEN_BATCH_DELAY_MS));
     await pushGistFilesOnce(token, gistId, batch);
   }
 

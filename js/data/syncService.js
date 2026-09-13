@@ -148,11 +148,13 @@ async function resolveGistId(token) {
  * the gist was genuinely deleted on github.com) still drops the cached id
  * so the next sync creates/finds a fresh one instead of failing forever.
  */
+const GIST_404_RETRY_DELAYS_MS = [700, 1500, 2500, 4000];
+
 async function fetchGistFiles(token, gistId, attempt = 0) {
   const res = await fetchWithRetry(`${API_BASE}/gists/${gistId}`, { headers: authHeaders(token) });
   if (res.status === 404) {
-    if (attempt < 2) {
-      await new Promise((r) => setTimeout(r, 700));
+    if (attempt < GIST_404_RETRY_DELAYS_MS.length) {
+      await new Promise((r) => setTimeout(r, GIST_404_RETRY_DELAYS_MS[attempt]));
       return fetchGistFiles(token, gistId, attempt + 1);
     }
     await githubAuth.setGistId('');

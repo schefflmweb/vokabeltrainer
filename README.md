@@ -1,6 +1,6 @@
 # Vokabeltrainer
 
-Englisch-Vokabeln lernen als installierbare PWA – Auto-Modus (Sprachausgabe, ein Tap pro Karte) fürs Fahren, Quiz-Modus für zuhause. Läuft komplett offline lokal (IndexedDB); optional Sync über einen privaten GitHub Gist in deinem eigenen GitHub-Account.
+Englisch-Vokabeln lernen als installierbare PWA – Auto-Modus (Sprachausgabe, ein Tap pro Karte) fürs Fahren, Quiz-Modus für zuhause. Läuft komplett offline lokal (IndexedDB); optional Sync über eine eigene, kostenlose Firebase-Firestore-Datenbank.
 
 ## Lokal testen
 
@@ -14,7 +14,7 @@ Dann im Browser öffnen (Desktop zum Testen, echtes iPhone für den vollständig
 
 ## Sync zwischen Geräten aktivieren
 
-Siehe [SETUP-GITHUB-SYNC.md](SETUP-GITHUB-SYNC.md) – kurze Anleitung zum GitHub-Zugriffstoken. Bis dahin läuft die App normal weiter, nur ohne Geräte-übergreifenden Sync.
+Siehe [SETUP-FIREBASE-SYNC.md](SETUP-FIREBASE-SYNC.md) – kurze Anleitung zum eigenen Firebase-Projekt. Bis dahin läuft die App normal weiter, nur ohne Geräte-übergreifenden Sync.
 
 ## Auf dem iPhone installieren
 

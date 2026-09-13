@@ -1,7 +1,7 @@
 import { vocabStore } from '../data/vocabStore.js';
 import { grammarStore } from '../data/grammarStore.js';
 import { parseCsv, toCsv, parseGrammarCsv, grammarToCsv } from '../csv/csvImport.js';
-import { githubAuth } from '../auth/githubAuth.js';
+import { firebaseAuth, authErrorMessage } from '../auth/firebaseAuth.js';
 import { syncService } from '../data/syncService.js';
 import { ttsService } from '../tts/ttsService.js';
 import { trashIcon, searchIcon, editIcon, checkCircleIcon, xCircleIcon, downloadIcon, chartIcon, flameIcon, speakerIcon, bookIcon } from '../ui/icons.js';
@@ -225,7 +225,7 @@ export function mount(container) {
     if (!container.querySelector('.manage-mode')) {
       container.innerHTML = `<div class="manage-mode pad"><p class="hint">Lädt …</p></div>`;
     }
-    await githubAuth.ready();
+    await firebaseAuth.ready();
     vocabCache = await vocabStore.getAll();
     const filtered = filterVocab(vocabCache, searchQuery);
     grammarAllCache = await grammarStore.getAll();
@@ -432,23 +432,19 @@ export function mount(container) {
     const box = container.querySelector('#account-box');
     if (!box) return;
 
-    const connected = githubAuth.isConfigured();
-    const tokenUrl = 'https://github.com/settings/tokens/new?description=Vokabeltrainer%20Sync&scopes=gist';
+    const connected = firebaseAuth.isConfigured();
     box.innerHTML = `
-      <h3>Sync über GitHub</h3>
+      <h3>Cloud-Sync</h3>
       ${connected
-        ? `<p class="hint" id="sync-status-text">–</p>
+        ? `<p class="hint">Angemeldet als ${escapeHtml(firebaseAuth.getEmail())}</p>
+           <p class="hint" id="sync-status-text">–</p>
            <p class="hint" id="sync-counts-text"></p>
            <button class="btn btn-secondary" id="disconnect-btn">Trennen</button>
-           <button class="btn btn-secondary" id="sync-now-btn">Jetzt synchronisieren</button>
-           <details class="sync-advanced">
-             <summary>Notfall: Sync klemmt mit einer Fehlermeldung</summary>
-             <p class="hint">Betrifft NICHT deine Vokabeln — das hier baut nur den Cloud-Speicher neu auf, falls er in einem kaputten Zustand feststeckt (z. B. nach einer Fehlermeldung über eine gekürzte Datei) und normales Synchronisieren nicht mehr durchkommt. Nur auf dem Gerät nutzen, dessen Vokabeln gerade vollständig/aktuell sind — dieser Stand wird danach zur neuen Cloud-Version, andere Geräte übernehmen ihn beim nächsten Sync.</p>
-             <button class="btn btn-secondary" id="reset-sync-btn">Sync zurücksetzen</button>
-           </details>`
-        : `<p class="hint">Vokabeln zwischen Geräten abgleichen — <a href="${tokenUrl}" target="_blank" rel="noopener">Token erstellen</a> (nur Berechtigung <code>gist</code> nötig) und hier einfügen.</p>
-           <form id="token-form" class="add-form">
-             <input type="password" id="token-input" placeholder="GitHub Personal Access Token" autocomplete="off" required />
+           <button class="btn btn-secondary" id="sync-now-btn">Jetzt synchronisieren</button>`
+        : `<p class="hint">Vokabeln zwischen Geräten abgleichen — mit dem Sync-Login anmelden, das in Firebase für diese App angelegt wurde (siehe SETUP-FIREBASE-SYNC.md).</p>
+           <form id="login-form" class="add-form">
+             <input type="email" id="email-input" placeholder="E-Mail" autocomplete="username" required />
+             <input type="password" id="password-input" placeholder="Passwort" autocomplete="current-password" required />
              <button type="submit" class="btn btn-primary">Verbinden</button>
            </form>
            <p class="hint" id="sync-status-text"></p>`}
@@ -456,25 +452,21 @@ export function mount(container) {
 
     if (connected) {
       box.querySelector('#disconnect-btn').addEventListener('click', async () => {
-        await githubAuth.disconnect();
+        await firebaseAuth.disconnect();
         renderAccountBox();
       });
       box.querySelector('#sync-now-btn').addEventListener('click', () => syncService.sync());
-      box.querySelector('#reset-sync-btn').addEventListener('click', () => {
-        if (!confirm('Cloud-Stand wirklich löschen und komplett neu von diesem Gerät hochladen? Nur tun, wenn die Vokabeln auf diesem Gerät vollständig/aktuell sind — andere Geräte übernehmen danach diesen Stand.')) return;
-        syncService.resetRemote();
-      });
     } else {
-      box.querySelector('#token-form').addEventListener('submit', async (e) => {
+      box.querySelector('#login-form').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const input = box.querySelector('#token-input');
-        const token = input.value.trim();
-        if (!token) return;
+        const email = box.querySelector('#email-input').value.trim();
+        const password = box.querySelector('#password-input').value;
+        if (!email || !password) return;
         try {
-          await githubAuth.setToken(token);
+          await firebaseAuth.signIn(email, password);
         } catch (err) {
           const statusEl = box.querySelector('#sync-status-text');
-          if (statusEl) statusEl.textContent = err.message || 'Token konnte nicht gespeichert werden.';
+          if (statusEl) statusEl.textContent = authErrorMessage(err);
           return;
         }
         renderAccountBox();
@@ -490,7 +482,7 @@ export function mount(container) {
       if (countsEl && status.counts) {
         const vocabN = status.counts.vocab ?? 0;
         const grammarN = status.counts.grammar ?? 0;
-        countsEl.textContent = `Auf GitHub: ${vocabN} Vokabeln, ${grammarN} Grammatikübungen`;
+        countsEl.textContent = `In der Cloud: ${vocabN} Vokabeln, ${grammarN} Grammatikübungen`;
       }
     });
   }

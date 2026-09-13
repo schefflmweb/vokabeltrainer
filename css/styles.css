@@ -763,22 +763,6 @@ section.progress-box {
   margin-top: 8px;
 }
 
-.sync-advanced {
-  margin-top: 14px;
-  border-top: 1px solid var(--border);
-  padding-top: 10px;
-}
-
-.sync-advanced summary {
-  cursor: pointer;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.sync-advanced .hint {
-  margin-top: 8px;
-}
-
 .voice-row {
   display: flex;
   align-items: center;

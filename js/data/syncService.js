@@ -283,37 +283,52 @@ function findOversizedRecord(records, thresholdBytes = 5000) {
   return worst;
 }
 
-/** Splits `records` into chunks that each stay under MAX_FILE_BYTES once JSON-serialized — always at least one chunk, even if empty, so the base file always exists. */
-function chunkRecords(records) {
-  const chunks = [];
-  let current = [];
-  let currentSize = 2; // "[" + "]"
-  for (const record of records) {
-    const size = utf8ByteLength(JSON.stringify(record)) + 1; // + comma/separator
-    if (current.length > 0 && currentSize + size > MAX_FILE_BYTES) {
-      chunks.push(current);
-      current = [];
-      currentSize = 2;
-    }
-    current.push(record);
-    currentSize += size;
-  }
-  chunks.push(current);
-  return chunks;
-}
-
 /**
  * Builds the file content with one record per line rather than
- * JSON.stringify()'s single unbroken line — repeatedly shrinking the target
- * file size didn't stop new files from getting truncated, which points away
- * from total byte size being the actual trigger and toward something like a
- * max-line-length heuristic instead (plausible for a service that also
- * truncates rendering of very long single lines, e.g. minified source).
- * Still valid JSON: whitespace between tokens is ignored by JSON.parse().
+ * JSON.stringify()'s single unbroken line — still valid JSON, since
+ * whitespace between tokens is ignored by JSON.parse().
  */
 function formatChunkContent(field, chunk, savedAt) {
   const items = chunk.map((record) => JSON.stringify(record)).join(',\n');
   return `{"${field}":[\n${items}\n],"savedAt":${JSON.stringify(savedAt)}}`;
+}
+
+/**
+ * Splits `records` into chunks that each stay under MAX_FILE_BYTES —
+ * always at least one chunk, even if empty, so the base file always exists.
+ *
+ * Every truncation report named a file just barely over the 50KB target
+ * (e.g. 51299 bytes for a 51200-byte target), on a different file each time,
+ * no matter how much else changed (request delay, PATCH batching, line
+ * format) — because none of those touched the actual bug: this used to
+ * budget each chunk against a made-up 2-byte overhead ("[" + "]") and a
+ * 1-byte-per-record separator, while the real wrapper written by
+ * formatChunkContent() is `{"field":[\n...\n],"savedAt":"..."}` (tens of
+ * bytes) joined with ',\n' (2 bytes, not 1) — so every chunk packed right up
+ * to the budget came out some tens of bytes larger than MAX_FILE_BYTES once
+ * actually formatted, consistently spilling just past GitHub's real
+ * truncation threshold. Packing now measures the real formatted output size
+ * instead of approximating it.
+ */
+function chunkRecords(records, field, savedAt) {
+  const overhead = utf8ByteLength(formatChunkContent(field, [], savedAt));
+  const chunks = [];
+  let current = [];
+  let currentSize = overhead;
+  for (const record of records) {
+    const recordBytes = utf8ByteLength(JSON.stringify(record));
+    const separatorBytes = current.length > 0 ? 2 : 0; // ',\n' before every item but the first
+    const addedSize = recordBytes + separatorBytes;
+    if (current.length > 0 && currentSize + addedSize > MAX_FILE_BYTES) {
+      chunks.push(current);
+      current = [];
+      currentSize = overhead;
+    }
+    current.push(record);
+    currentSize += current.length > 1 ? addedSize : recordBytes;
+  }
+  chunks.push(current);
+  return chunks;
 }
 
 /**
@@ -476,8 +491,8 @@ export const syncService = {
           const preview = (oversized.record.en || oversized.record.question || oversized.record.id || '').toString().slice(0, 60);
           throw new Error(`Ein einzelner Eintrag in "${field}" ist auffällig groß (${Math.round(oversized.size / 1024)} KB — normal wären wenige hundert Bytes): "${preview}…". Das ist vermutlich die eigentliche Ursache der Kürzungs-Fehler. Bitte in Verwalten danach suchen und den Eintrag bearbeiten oder löschen.`);
         }
-        const chunks = chunkRecords(merged);
         const savedAt = new Date().toISOString();
+        const chunks = chunkRecords(merged, field, savedAt);
         chunks.forEach((chunk, i) => {
           pushPayload[partFileName(baseFileName, i)] = { content: formatChunkContent(field, chunk, savedAt) };
         });

@@ -1,5 +1,5 @@
-import { vocabStore } from '../data/vocabStore.js';
 import { syncService } from '../data/syncService.js';
+import { PRACTICE_SOURCES, getDueFromSource, getSampleFromSource } from '../data/practicePool.js';
 import { ttsService } from '../tts/ttsService.js';
 import { progressBarHtml } from '../ui/progressBar.js';
 import { flagGB, flagDE } from '../ui/flags.js';
@@ -19,12 +19,13 @@ function shuffle(arr) {
 
 export function mount(container) {
   let queue = [];
-  let allVocab = [];
+  let distractorSample = [];
   let index = -1;
   let stats = { known: 0, unknown: 0 };
-  let phase = 'select'; // 'select' | 'active' | 'finished'
+  let phase = 'select'; // 'select' | 'active' | 'finished' | 'empty'
   let quizType = 'choice'; // 'choice' | 'typing' | 'readthink'
   let direction = 'en-de'; // 'en-de' | 'de-en'
+  let source = 'vocab'; // 'vocab' | 'idioms' | 'both'
   let answered = false;
 
   // "Zuhören" per-card state (mirrors Auto mode's tap flow).
@@ -52,10 +53,16 @@ export function mount(container) {
   let pendingQueue = null;
   function prefetchQueue() {
     pendingQueue = null;
-    vocabStore.getDue(SESSION_SIZE).then((q) => {
+    getDueFromSource(source, SESSION_SIZE).then((q) => {
       pendingQueue = q;
       if (phase === 'select' || phase === 'finished') render();
     });
+  }
+
+  function setSource(src) {
+    source = src;
+    prefetchQueue(); // the prefetched "Zuhören" queue is for the OLD source — refetch for the new one
+    renderSelect();
   }
 
   function promptText(card) {
@@ -79,7 +86,7 @@ export function mount(container) {
   }
 
   function buildOptions(card) {
-    const distractorPool = allVocab.filter((v) => v.id !== card.id);
+    const distractorPool = distractorSample.filter((v) => v.id !== card.id);
     const distractors = shuffle(distractorPool).slice(0, 3).map((v) => answerText(v));
     return shuffle([answerText(card), ...distractors]);
   }
@@ -98,7 +105,7 @@ export function mount(container) {
       if (!pendingQueue) return; // guarded by disabled button; shouldn't fire
       queue = pendingQueue;
       index = 0;
-      phase = queue.length > 0 ? 'active' : 'finished';
+      phase = queue.length > 0 ? 'active' : 'empty';
       prefetchQueue(); // load next round's due-list in the background
       if (phase === 'active') {
         enterReadThink(currentCard()); // real tap — speaks the first card synchronously
@@ -108,10 +115,10 @@ export function mount(container) {
       return;
     }
 
-    allVocab = await vocabStore.getSample(150); // enough variety for multiple-choice distractors without loading the whole collection
-    queue = await vocabStore.getDue(SESSION_SIZE);
+    distractorSample = await getSampleFromSource(source, 150); // enough variety for multiple-choice distractors without loading the whole collection
+    queue = await getDueFromSource(source, SESSION_SIZE);
     index = 0;
-    phase = queue.length > 0 ? 'active' : 'finished';
+    phase = queue.length > 0 ? 'active' : 'empty';
     render();
   }
 
@@ -124,7 +131,7 @@ export function mount(container) {
 
   function registerAnswer(correct, card) {
     stats[correct ? 'known' : 'unknown'] += 1;
-    vocabStore.markReviewed(card.id, correct);
+    card.__store.markReviewed(card.id, correct);
     syncService.scheduleSync();
   }
 
@@ -138,6 +145,7 @@ export function mount(container) {
   function render() {
     if (phase === 'select') return renderSelect();
     if (phase === 'finished') return renderFinished();
+    if (phase === 'empty') return renderEmpty();
     if (quizType === 'typing') return renderTyping();
     if (quizType === 'readthink') return renderReadThink();
     return renderChoice();
@@ -147,6 +155,11 @@ export function mount(container) {
     const rtReady = !!pendingQueue;
     container.innerHTML = `
       <div class="quiz-mode pad center-text">
+        <p class="hint">Was möchtest du üben?</p>
+        <div class="direction-toggle">
+          ${PRACTICE_SOURCES.map((s) => `<button class="btn toggle-btn ${source === s.key ? 'active' : ''}" data-source="${s.key}">${s.label}</button>`).join('')}
+        </div>
+
         <p class="hint">Übungsrichtung</p>
         <div class="direction-toggle">
           <button class="btn toggle-btn ${direction === 'en-de' ? 'active' : ''}" id="dir-en-de">${flagGB} → ${flagDE} Englisch → Deutsch</button>
@@ -167,11 +180,24 @@ export function mount(container) {
           <span>Zuhören<span class="hint">${rtReady ? 'Anhören, dann bewerten' : 'Lädt …'}</span></span>
         </button>
       </div>`;
+    container.querySelectorAll('[data-source]').forEach((btn) => {
+      btn.addEventListener('click', () => setSource(btn.dataset.source));
+    });
     container.querySelector('#dir-en-de').addEventListener('click', () => setDirection('en-de'));
     container.querySelector('#dir-de-en').addEventListener('click', () => setDirection('de-en'));
     container.querySelector('#start-choice').addEventListener('click', () => startSession('choice'));
     container.querySelector('#start-typing').addEventListener('click', () => startSession('typing'));
     container.querySelector('#start-readthink').addEventListener('click', () => startSession('readthink'));
+  }
+
+  function renderEmpty() {
+    container.innerHTML = `
+      <div class="quiz-mode pad center">
+        <h2 class="btn-with-icon"><span class="icon-inline-wrap icon-lg">${checklistIcon}</span> Nichts zum Üben</h2>
+        <p class="hint">Für diese Auswahl sind noch keine Einträge vorhanden. Importiere welche unter Verwalten, oder wähle eine andere Quelle.</p>
+        <button class="btn btn-secondary" id="switch-btn">Zurück</button>
+      </div>`;
+    container.querySelector('#switch-btn').addEventListener('click', backToSelect);
   }
 
   function renderFinished() {

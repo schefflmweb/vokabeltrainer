@@ -1,10 +1,11 @@
 import { vocabStore } from '../data/vocabStore.js';
 import { grammarStore } from '../data/grammarStore.js';
+import { idiomStore } from '../data/idiomStore.js';
 import { parseCsv, toCsv, parseGrammarCsv, grammarToCsv } from '../csv/csvImport.js';
 import { firebaseAuth, authErrorMessage } from '../auth/firebaseAuth.js';
 import { syncService } from '../data/syncService.js';
 import { ttsService } from '../tts/ttsService.js';
-import { trashIcon, searchIcon, editIcon, checkCircleIcon, xCircleIcon, downloadIcon, chartIcon, flameIcon, speakerIcon, bookIcon } from '../ui/icons.js';
+import { trashIcon, searchIcon, editIcon, checkCircleIcon, xCircleIcon, downloadIcon, chartIcon, flameIcon, speakerIcon, bookIcon, quoteIcon } from '../ui/icons.js';
 import { APP_VERSION } from '../version.js';
 
 const VOICE_SAMPLES = { en: 'This is what I sound like.', de: 'So höre ich mich an.' };
@@ -82,10 +83,13 @@ export function mount(container) {
   let unsubscribeVoices = null;
   let csvStatusMessage = '';
   let grammarCsvStatusMessage = '';
+  let idiomCsvStatusMessage = '';
   let searchQuery = '';
   let vocabCache = [];
   let grammarAllCache = [];
   let grammarCount = 0;
+  let idiomAllCache = [];
+  let idiomCount = 0;
   let editingId = null;
   let lastSyncState = null;
   let visibleCount = VOCAB_PAGE_SIZE;
@@ -166,6 +170,20 @@ export function mount(container) {
     URL.revokeObjectURL(url);
   }
 
+  function exportIdiomCsv(list) {
+    const csv = toCsv(list);
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `idioms-export-${dateStr}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   function exportGrammarCsv(list) {
     const csv = grammarToCsv(list);
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -187,6 +205,15 @@ export function mount(container) {
     grammarCount = grammarAllCache.length;
     const el = container.querySelector('#grammar-count');
     if (el) el.textContent = grammarCount;
+  }
+
+  /** Same as updateGrammarUI(), for the idioms collection. */
+  async function updateIdiomUI() {
+    if (!container.querySelector('.manage-mode')) return;
+    idiomAllCache = await idiomStore.getAll();
+    idiomCount = idiomAllCache.length;
+    const el = container.querySelector('#idiom-count');
+    if (el) el.textContent = idiomCount;
   }
 
   /** Recomputes the stat tiles from the in-memory vocabCache — no DB read, so it's cheap to call after every local edit. */
@@ -216,6 +243,7 @@ export function mount(container) {
     vocabCache = await vocabStore.getAll();
     updateVocabListOnly();
     await updateGrammarUI();
+    await updateIdiomUI();
     await updateStatsUI();
   }
 
@@ -230,6 +258,8 @@ export function mount(container) {
     const filtered = filterVocab(vocabCache, searchQuery);
     grammarAllCache = await grammarStore.getAll();
     grammarCount = grammarAllCache.length;
+    idiomAllCache = await idiomStore.getAll();
+    idiomCount = idiomAllCache.length;
 
     const now = Date.now();
     const dueToday = vocabCache.filter((v) => v.srs.dueDate <= now).length;
@@ -319,6 +349,17 @@ export function mount(container) {
           <p id="grammar-csv-status" class="hint">${escapeHtml(grammarCsvStatusMessage)}</p>
           <button class="btn btn-secondary btn-with-icon" id="grammar-csv-export-btn"><span class="icon-inline-wrap">${downloadIcon}</span> Als CSV exportieren</button>
           <button class="btn btn-danger btn-with-icon" id="grammar-delete-all-btn"><span class="icon-inline-wrap">${trashIcon}</span> Alle Grammatikübungen löschen</button>
+        </section>
+
+        <section>
+          <h3><span class="icon-inline-wrap">${quoteIcon}</span> Idioms (<span id="idiom-count">${idiomCount}</span>)</h3>
+          <p class="hint">Eigene Sammlung, getrennt von den Vokabeln — in Auto- und Quiz-Modus per Umschalter "Vokabeln / Idioms / Beide" wählbar. Per CSV importieren. Spalten: Englisch (die Redewendung), Deutsch (Bedeutung), Kategorie (optional), Beispielsatz (optional), Wortart (optional)</p>
+          <input type="file" id="idiom-csv-file" accept=".csv,text/csv" />
+          <textarea id="idiom-csv-text" rows="4" placeholder="break the ice,das Eis brechen"></textarea>
+          <button class="btn btn-secondary" id="idiom-csv-import-btn">Importieren</button>
+          <p id="idiom-csv-status" class="hint">${escapeHtml(idiomCsvStatusMessage)}</p>
+          <button class="btn btn-secondary btn-with-icon" id="idiom-csv-export-btn"><span class="icon-inline-wrap">${downloadIcon}</span> Als CSV exportieren</button>
+          <button class="btn btn-danger btn-with-icon" id="idiom-delete-all-btn"><span class="icon-inline-wrap">${trashIcon}</span> Alle Idioms löschen</button>
         </section>
 
         <p class="hint center-text app-version">App-Version ${APP_VERSION}</p>
@@ -424,6 +465,39 @@ export function mount(container) {
       updateGrammarUI();
     });
 
+    container.querySelector('#idiom-csv-file').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      container.querySelector('#idiom-csv-text').value = await file.text();
+    });
+
+    container.querySelector('#idiom-csv-import-btn').addEventListener('click', async () => {
+      const text = container.querySelector('#idiom-csv-text').value;
+      const entries = parseCsv(text);
+      if (entries.length === 0) {
+        idiomCsvStatusMessage = 'Keine gültigen Zeilen gefunden.';
+        container.querySelector('#idiom-csv-status').textContent = idiomCsvStatusMessage;
+        return;
+      }
+      const { added, updated } = await idiomStore.addMany(entries, idiomAllCache);
+      syncService.sync();
+      idiomCsvStatusMessage = updated.length > 0
+        ? `${added.length} neu hinzugefügt, ${updated.length} bereits vorhandene aktualisiert.`
+        : `${added.length} Idioms importiert.`;
+      container.querySelector('#idiom-csv-status').textContent = idiomCsvStatusMessage;
+      container.querySelector('#idiom-csv-text').value = '';
+      updateIdiomUI();
+    });
+
+    container.querySelector('#idiom-csv-export-btn').addEventListener('click', () => exportIdiomCsv(idiomAllCache));
+
+    container.querySelector('#idiom-delete-all-btn').addEventListener('click', async () => {
+      if (!confirm(`Wirklich alle ${idiomCount} Idioms (inkl. Lernfortschritt) unwiderruflich löschen?`)) return;
+      await idiomStore.removeAll();
+      syncService.sync();
+      updateIdiomUI();
+    });
+
     renderAccountBox();
     renderVoiceBox();
   }
@@ -482,7 +556,8 @@ export function mount(container) {
       if (countsEl && status.counts) {
         const vocabN = status.counts.vocab ?? 0;
         const grammarN = status.counts.grammar ?? 0;
-        countsEl.textContent = `In der Cloud: ${vocabN} Vokabeln, ${grammarN} Grammatikübungen`;
+        const idiomN = status.counts.idioms ?? 0;
+        countsEl.textContent = `In der Cloud: ${vocabN} Vokabeln, ${grammarN} Grammatikübungen, ${idiomN} Idioms`;
       }
     });
   }

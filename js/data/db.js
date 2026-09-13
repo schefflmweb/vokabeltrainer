@@ -1,8 +1,9 @@
 const DB_NAME = 'vokabeltrainer';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_VOCAB = 'vocab';
 const STORE_META = 'meta';
 const STORE_GRAMMAR = 'grammar';
+const STORE_IDIOMS = 'idioms';
 
 let dbPromise = null;
 
@@ -30,6 +31,16 @@ function openDb() {
         store.createIndex('dirty', 'dirty', { unique: false });
         store.createIndex('topic', 'topic', { unique: false });
       }
+      // v3: idioms — same shape as vocab (en/de/example/category/srs), kept
+      // in its own store so its own "list" and count stay separate from
+      // vocab's rather than inflating it, while Auto/Quiz mode can still
+      // practice from either or both pools.
+      if (!db.objectStoreNames.contains(STORE_IDIOMS)) {
+        const store = db.createObjectStore(STORE_IDIOMS, { keyPath: 'id' });
+        store.createIndex('dueDate', 'srs.dueDate', { unique: false });
+        store.createIndex('dirty', 'dirty', { unique: false });
+        store.createIndex('category', 'category', { unique: false });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -48,7 +59,7 @@ function wrapRequest(req) {
   });
 }
 
-export const STORE_NAMES = { VOCAB: STORE_VOCAB, META: STORE_META, GRAMMAR: STORE_GRAMMAR };
+export const STORE_NAMES = { VOCAB: STORE_VOCAB, META: STORE_META, GRAMMAR: STORE_GRAMMAR, IDIOMS: STORE_IDIOMS };
 
 export const db = {
   async getAll(storeName = STORE_VOCAB) {

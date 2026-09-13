@@ -1,5 +1,5 @@
-import { vocabStore } from '../data/vocabStore.js';
 import { ttsService } from '../tts/ttsService.js';
+import { PRACTICE_SOURCES, getDueFromSource } from '../data/practicePool.js';
 import { syncService } from '../data/syncService.js';
 import { speechInputService } from '../stt/speechInputService.js';
 import { toneService } from '../audio/toneService.js';
@@ -29,10 +29,11 @@ const STOP_WINDOW_MS = 2500;
 export function mount(container) {
   let direction = 'en-de'; // 'en-de' | 'de-en'
   let interactionMode = 'tap'; // 'tap' | 'voice'
-  let phase = 'select'; // 'select' | 'active' | 'finished'
+  let phase = 'select'; // 'select' | 'active' | 'finished' | 'empty'
   let queue = [];
   let index = -1;
   let stats = { known: 0, unknown: 0 };
+  let source = 'vocab'; // 'vocab' | 'idioms' | 'both'
 
   // Voice-mode per-card state
   let voiceState = 'idle'; // 'speaking' | 'listening' | 'result' | 'error'
@@ -74,7 +75,7 @@ export function mount(container) {
   let pendingQueue = null;
   function prefetchQueue() {
     pendingQueue = null;
-    vocabStore.getDue(SESSION_SIZE).then((q) => {
+    getDueFromSource(source, SESSION_SIZE).then((q) => {
       pendingQueue = q;
       if (phase === 'select' || phase === 'finished') render();
     });
@@ -105,6 +106,12 @@ export function mount(container) {
     render();
   }
 
+  function setSource(src) {
+    source = src;
+    prefetchQueue(); // the prefetched queue is for the OLD source — refetch for the new one
+    render();
+  }
+
   function setInteractionMode(mode) {
     interactionMode = mode;
     if (mode === 'voice') speechInputService.requestMicPermission();
@@ -118,7 +125,7 @@ export function mount(container) {
     queue = pendingQueue;
     index = 0;
     stats = { known: 0, unknown: 0 };
-    phase = queue.length > 0 ? 'active' : 'finished';
+    phase = queue.length > 0 ? 'active' : 'empty';
     prefetchQueue(); // load next round's due-list in the background
     enterCard();
   }
@@ -271,7 +278,7 @@ export function mount(container) {
     const expected = secondaryText(card);
     const correct = speechInputService.answersMatchAny(transcripts, expected);
     stats[correct ? 'known' : 'unknown'] += 1;
-    vocabStore.markReviewed(card.id, correct);
+    card.__store.markReviewed(card.id, correct);
     syncService.scheduleSync();
     voiceResult = { transcript: transcripts?.[0] || '', correct, expected };
     voiceState = 'result';
@@ -347,7 +354,7 @@ export function mount(container) {
       autoAdvanceTimer = null;
     }
     stats[known ? 'known' : 'unknown'] += 1;
-    vocabStore.markReviewed(card.id, known);
+    card.__store.markReviewed(card.id, known);
     syncService.scheduleSync();
     index += 1;
     if (currentCard()) {
@@ -381,6 +388,7 @@ export function mount(container) {
     }
     if (phase === 'select') return renderSelect();
     if (phase === 'finished') return renderFinished();
+    if (phase === 'empty') return renderEmpty();
     return interactionMode === 'voice' ? renderVoiceActive() : renderTapActive();
   }
 
@@ -389,6 +397,11 @@ export function mount(container) {
     const voiceSupported = speechInputService.isSupported();
     container.innerHTML = `
       <div class="audio-mode pad center-text">
+        <p class="hint">Was möchtest du üben?</p>
+        <div class="direction-toggle">
+          ${PRACTICE_SOURCES.map((s) => `<button class="btn toggle-btn ${source === s.key ? 'active' : ''}" data-source="${s.key}">${s.label}</button>`).join('')}
+        </div>
+
         <p class="hint">Übungsrichtung</p>
         <div class="direction-toggle">
           <button class="btn toggle-btn ${direction === 'en-de' ? 'active' : ''}" id="dir-en-de">${flagGB} → ${flagDE} Englisch → Deutsch</button>
@@ -409,11 +422,24 @@ export function mount(container) {
           <span>${ready ? "Los geht's" : 'Lädt …'}</span>
         </button>
       </div>`;
+    container.querySelectorAll('[data-source]').forEach((btn) => {
+      btn.addEventListener('click', () => setSource(btn.dataset.source));
+    });
     container.querySelector('#dir-en-de').addEventListener('click', () => setDirection('en-de'));
     container.querySelector('#dir-de-en').addEventListener('click', () => setDirection('de-en'));
     container.querySelector('#mode-tap').addEventListener('click', () => setInteractionMode('tap'));
     container.querySelector('#mode-voice').addEventListener('click', () => setInteractionMode('voice'));
     container.querySelector('#start-btn').addEventListener('click', startSession);
+  }
+
+  function renderEmpty() {
+    container.innerHTML = `
+      <div class="audio-mode pad center">
+        <h2 class="btn-with-icon"><span class="icon-inline-wrap icon-lg">${warningIcon}</span> Nichts zum Üben</h2>
+        <p class="hint">Für diese Auswahl sind noch keine Einträge vorhanden. Importiere welche unter Verwalten, oder wähle eine andere Quelle.</p>
+        <button class="btn btn-secondary" id="switch-btn">Zurück</button>
+      </div>`;
+    container.querySelector('#switch-btn').addEventListener('click', backToSelect);
   }
 
   function renderFinished() {

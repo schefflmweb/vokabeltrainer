@@ -2,6 +2,7 @@ import { getFirebase } from './firebaseClient.js';
 import { firebaseAuth } from '../auth/firebaseAuth.js';
 import { vocabStore } from './vocabStore.js';
 import { grammarStore } from './grammarStore.js';
+import { idiomStore } from './idiomStore.js';
 import { db } from './db.js';
 
 /**
@@ -17,7 +18,8 @@ import { db } from './db.js';
  */
 const COLLECTIONS = [
   { store: vocabStore, collectionName: 'vocab', field: 'vocab' },
-  { store: grammarStore, collectionName: 'grammar', field: 'grammar' }
+  { store: grammarStore, collectionName: 'grammar', field: 'grammar' },
+  { store: idiomStore, collectionName: 'idioms', field: 'idioms' }
 ];
 
 /**

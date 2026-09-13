@@ -2,18 +2,23 @@ import { db, STORE_NAMES } from './db.js';
 import { defaultSrs, schedule } from '../srs/scheduler.js';
 import { touchStreak, getStreak } from './streak.js';
 
-// How many candidate records getDue() reads via the dueDate index before
-// shuffling and slicing to the requested session size. Well above any
-// realistic session size so shuffled results stay varied, but far below the
-// full collection — with large imports (thousands of words) reading
-// everything just to pick ~15 due items made session start noticeably slow.
+/**
+ * Same shape and behavior as vocabStore (records look identical: en/de/
+ * category/example/type/srs), just kept in its own IndexedDB store and
+ * Firestore collection — an idiom import shouldn't inflate "Vokabeln
+ * gesamt" or dilute the vocab practice pool, but Auto/Quiz mode can still
+ * pull from this store directly, or mixed with vocab, when the user picks
+ * that as the practice source (see quizMode.js/audioMode.js).
+ */
+const STORE = STORE_NAMES.IDIOMS;
+
 const DUE_POOL_CAP = 400;
 
 let idCounter = 0;
 function makeId(en) {
   const slug = en.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
   idCounter += 1;
-  return `custom-${slug}-${Date.now().toString(36)}-${idCounter.toString(36)}`;
+  return `idiom-${slug}-${Date.now().toString(36)}-${idCounter.toString(36)}`;
 }
 
 function normalizeEn(en) {
@@ -31,56 +36,40 @@ function applyUpdate(record, { de, category, example, type }) {
   return record;
 }
 
-export const vocabStore = {
+export const idiomStore = {
   async getAll() {
-    const all = await db.getAll();
+    const all = await db.getAll(STORE);
     return all.filter((v) => !v.deleted);
   },
 
   async getById(id) {
-    return db.get(id);
+    return db.get(id, STORE);
   },
 
-  /** A random subset, for callers that just need "a bunch of other words" (e.g. multiple-choice distractors) without loading the whole collection. */
+  /** A random subset, for callers that just need "a bunch of other idioms" (e.g. multiple-choice distractors) without loading the whole collection. */
   async getSample(cap = 150) {
-    const pool = await db.samplePool(STORE_NAMES.VOCAB, cap);
+    const pool = await db.samplePool(STORE, cap);
     return pool.filter((v) => !v.deleted);
   },
 
   async getDue(limit = 20, now = Date.now()) {
-    // Reads via the dueDate index instead of the whole store — with a large
-    // collection, loading every record just to find ~15 due ones made every
-    // session start slow.
-    let pool = (await db.queryIndex(STORE_NAMES.VOCAB, 'dueDate', IDBKeyRange.upperBound(now), DUE_POOL_CAP))
+    let pool = (await db.queryIndex(STORE, 'dueDate', IDBKeyRange.upperBound(now), DUE_POOL_CAP))
       .filter((v) => !v.deleted);
     if (pool.length === 0) {
-      // Nothing due -> practice from a random sample of everything, rather
-      // than loading the full collection.
-      pool = (await db.samplePool(STORE_NAMES.VOCAB, DUE_POOL_CAP)).filter((v) => !v.deleted);
+      pool = (await db.samplePool(STORE, DUE_POOL_CAP)).filter((v) => !v.deleted);
     }
-    // Shuffled, not sorted by dueDate: freshly-seeded/imported words share
-    // (near-)identical timestamps, so sorting left the due pool in a fixed
-    // order and sessions kept showing the same first N cards every time.
     const shuffled = [...pool].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, limit);
   },
 
-  /**
-   * Adds a vocab entry, or updates the existing one (by English word,
-   * case-insensitive) if it already exists — never creates a duplicate.
-   * Learning progress on an updated entry is preserved. `knownList`, if
-   * given, is used for the dedup check instead of a fresh full-table scan —
-   * callers that already keep the full list in memory (e.g. manageMode's
-   * vocabCache) should pass it, since a getAll() per single add gets slow
-   * once the collection is large.
-   */
+  /** Adds an idiom entry, or updates the existing one (by English phrase, case-insensitive) if it already exists — never creates a duplicate. `knownList`, if given, is used for the dedup check instead of a fresh full-table scan. */
   async add({ en, de, category, example, type }, knownList = null) {
-    const all = knownList || await db.getAll();
+    const all = knownList || await db.getAll(STORE);
     const target = normalizeEn(en);
     const existing = all.find((v) => !v.deleted && normalizeEn(v.en) === target);
     if (existing) {
       applyUpdate(existing, { de, category, example, type });
-      await db.put(existing);
+      await db.put(existing, STORE);
       return existing;
     }
 
@@ -99,13 +88,13 @@ export const vocabStore = {
       dirty: true,
       srs: defaultSrs()
     };
-    await db.put(record);
+    await db.put(record, STORE);
     return record;
   },
 
-  /** Same dedup behavior as add(), batched — used by CSV import. Returns which entries were newly added vs. updated. Same `knownList` optimization as add(). */
+  /** Same dedup behavior as add(), batched — used by CSV import. */
   async addMany(entries, knownList = null) {
-    const all = knownList || await db.getAll();
+    const all = knownList || await db.getAll(STORE);
     const byEn = new Map(all.filter((v) => !v.deleted).map((v) => [normalizeEn(v.en), v]));
     const now = Date.now();
     const added = [];
@@ -137,13 +126,13 @@ export const vocabStore = {
       }
     }
 
-    await db.putAll([...added, ...updated]);
+    await db.putAll([...added, ...updated], STORE);
     return { added, updated };
   },
 
-  /** Directly overwrites an existing entry's fields by id — used for manual edits (a targeted single-record change, unlike add()'s collision-avoiding upsert). Learning progress is untouched. */
+  /** Directly overwrites an existing entry's fields by id — used for manual edits. Learning progress is untouched. */
   async update(id, { en, de, category, example, type }) {
-    const record = await db.get(id);
+    const record = await db.get(id, STORE);
     if (!record) return null;
     record.en = en.trim();
     record.de = de.trim();
@@ -152,77 +141,71 @@ export const vocabStore = {
     record.type = type?.trim() || '';
     record.updatedAt = Date.now();
     record.dirty = true;
-    await db.put(record);
+    await db.put(record, STORE);
     return record;
   },
 
   async remove(id) {
-    const record = await db.get(id);
+    const record = await db.get(id, STORE);
     if (!record) return;
     record.deleted = true;
     record.updatedAt = Date.now();
     record.dirty = true;
-    await db.put(record);
+    await db.put(record, STORE);
   },
 
-  /** Soft-deletes every vocab entry (same tombstone mechanism as remove()) so the deletion also propagates through sync instead of being resurrected by a later merge. */
+  /** Soft-deletes every idiom entry (same tombstone mechanism as remove()) so the deletion also propagates through sync instead of being resurrected by a later merge. */
   async removeAll() {
     const all = await this.getAll();
     const now = Date.now();
     const updated = all.map((v) => ({ ...v, deleted: true, updatedAt: now, dirty: true }));
-    await db.putAll(updated);
+    await db.putAll(updated, STORE);
   },
 
-  /** How many entries are soft-deleted (tombstoned, not physically removed) right now — a diagnostic for "getAll() shows 0 but nothing was actually purged". */
   async getDeletedCount() {
-    const all = await db.getAll();
+    const all = await db.getAll(STORE);
     return all.filter((v) => v.deleted).length;
   },
 
-  /** Undoes removeAll()/remove(): un-tombstones every soft-deleted entry, bumping updatedAt so the restore also propagates through sync. Recovery path if "Alle löschen" ran unintentionally — nothing was ever physically purged. */
   async restoreAllDeleted() {
-    const all = await db.getAll();
+    const all = await db.getAll(STORE);
     const now = Date.now();
     const toRestore = all.filter((v) => v.deleted).map((v) => ({ ...v, deleted: false, updatedAt: now, dirty: true }));
-    await db.putAll(toRestore);
+    await db.putAll(toRestore, STORE);
     return toRestore.length;
   },
 
   async markReviewed(id, known) {
-    const record = await db.get(id);
+    const record = await db.get(id, STORE);
     if (!record) return null;
     record.srs = schedule(record.srs, known);
     record.updatedAt = Date.now();
     record.dirty = true;
-    await db.put(record);
-    touchStreak();
+    await db.put(record, STORE);
+    touchStreak(); // shared with vocabStore — one combined daily streak, not a separate one per collection
     return record;
   },
 
   getStreak,
 
   async getDirty() {
-    const all = await db.getAll();
+    const all = await db.getAll(STORE);
     return all.filter((v) => v.dirty);
   },
 
   async clearDirty(ids) {
     const set = new Set(ids);
-    const all = await db.getAll();
+    const all = await db.getAll(STORE);
     const toClear = all.filter((v) => set.has(v.id));
     for (const record of toClear) {
       record.dirty = false;
     }
-    await db.putAll(toClear);
+    await db.putAll(toClear, STORE);
   },
 
-  /**
-   * Merge a set of remote records (from the sync gist) into local storage,
-   * per-record last-write-wins by updatedAt. Returns the merged full set,
-   * ready to be re-uploaded.
-   */
+  /** Same per-record last-write-wins merge as vocabStore — used by syncService for the idioms collection. */
   async mergeFromRemote(remoteRecords) {
-    const localAll = await db.getAll();
+    const localAll = await db.getAll(STORE);
     const localById = new Map(localAll.map((r) => [r.id, r]));
     const remoteById = new Map((remoteRecords || []).map((r) => [r.id, r]));
     const allIds = new Set([...localById.keys(), ...remoteById.keys()]);
@@ -239,7 +222,7 @@ export const vocabStore = {
         merged.push({ ...remote, dirty: false });
       }
     }
-    await db.putAll(merged);
+    await db.putAll(merged, STORE);
     return merged;
   }
 };

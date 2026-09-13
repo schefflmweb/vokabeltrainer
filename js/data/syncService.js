@@ -139,10 +139,22 @@ async function resolveGistId(token) {
   return id;
 }
 
-async function fetchGistFiles(token, gistId) {
+/**
+ * A 404 right after creating a gist (or right after writing to one, for
+ * pushGistFiles's own verification read) can be GitHub's read path not yet
+ * reflecting a write that only just happened, not the gist actually being
+ * gone — so a lone immediate 404 is retried a couple of times with a short
+ * delay before it's treated as real. A 404 that persists past that (e.g.
+ * the gist was genuinely deleted on github.com) still drops the cached id
+ * so the next sync creates/finds a fresh one instead of failing forever.
+ */
+async function fetchGistFiles(token, gistId, attempt = 0) {
   const res = await fetchWithRetry(`${API_BASE}/gists/${gistId}`, { headers: authHeaders(token) });
   if (res.status === 404) {
-    // The cached gist id no longer exists (deleted on github.com, say) — drop it so the next sync creates/finds a fresh one instead of failing forever.
+    if (attempt < 2) {
+      await new Promise((r) => setTimeout(r, 700));
+      return fetchGistFiles(token, gistId, attempt + 1);
+    }
     await githubAuth.setGistId('');
     throw new Error('Gist nicht gefunden — bitte erneut synchronisieren');
   }

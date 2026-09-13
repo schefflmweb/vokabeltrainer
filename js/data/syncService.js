@@ -10,18 +10,24 @@ const API_BASE = 'https://api.github.com';
 const GIST_DESCRIPTION = 'Vokabeltrainer-Daten (bitte nicht löschen)';
 
 /**
- * Gist files over ~1MB come back from the API with `content` omitted
- * (`truncated: true`) — readable only via a separate `raw_url`, which lives
- * on a different domain (gist.githubusercontent.com). That domain's CORS
- * preflight response rejects the Authorization header this app needs to
- * send for a private gist ("Response to preflight request doesn't pass
- * access control check"), so the browser blocks that fetch outright — not
- * fixable from this side, since it's the other server's CORS policy.
- * Instead, each collection is split across multiple gist files, each kept
- * safely under the threshold, so every read/write only ever talks to
- * api.github.com, which does support this properly.
+ * Gist files over some threshold come back from the API with `content`
+ * omitted (`truncated: true`) — readable only via a separate `raw_url`,
+ * which lives on a different domain (gist.githubusercontent.com). That
+ * domain's CORS preflight response rejects the Authorization header this
+ * app needs to send for a private gist ("Response to preflight request
+ * doesn't pass access control check"), so the browser blocks that fetch
+ * outright — not fixable from this side, since it's the other server's CORS
+ * policy. Instead, each collection is split across multiple gist files,
+ * each kept safely under the threshold, so every read/write only ever
+ * talks to api.github.com, which does support this properly.
+ *
+ * GitHub doesn't document the exact threshold precisely (commonly cited as
+ * ~1MB), and a byte-accurate chunk targeting 800KB still got truncated in
+ * practice — so this stays well clear of it with a large margin rather than
+ * chasing the exact real number, since smaller files cost nothing but a
+ * few more of them in the gist.
  */
-const MAX_FILE_BYTES = 800 * 1024;
+const MAX_FILE_BYTES = 200 * 1024;
 
 /** Each collection's records are stored as `<baseFileName>.json`, `<baseFileName>.part1.json`, `<baseFileName>.part2.json`, ... as needed. */
 const COLLECTIONS = [
@@ -145,6 +151,13 @@ async function fetchGistFiles(token, gistId) {
   return gist.files || {};
 }
 
+/**
+ * Pushes files and checks GitHub's own response for any that came back
+ * truncated — the PATCH response already includes the full updated file
+ * list, so this is a free self-check, no extra request. Catches a chunk
+ * that's still too large on the very sync that wrote it, instead of only
+ * surfacing on some later device trying to read it back.
+ */
 async function pushGistFiles(token, gistId, filesPayload) {
   const res = await fetchWithRetry(`${API_BASE}/gists/${gistId}`, {
     method: 'PATCH',
@@ -152,6 +165,13 @@ async function pushGistFiles(token, gistId, filesPayload) {
     body: JSON.stringify({ files: filesPayload })
   });
   if (!res.ok) throw new Error(httpErrorMessage(res, 'GitHub-Speichern fehlgeschlagen'));
+  const gist = await res.json();
+  const truncatedNames = Object.entries(gist.files || {})
+    .filter(([, file]) => file.truncated)
+    .map(([name]) => name);
+  if (truncatedNames.length > 0) {
+    throw new Error(`GitHub hat beim Hochladen ${truncatedNames.join(', ')} trotzdem gekürzt — bitte "Sync zurücksetzen" versuchen. Damit merkt dieses Gerät es sofort, statt dass es erst später auf einem anderen auffällt.`);
+  }
 }
 
 function partFileName(baseFileName, index) {

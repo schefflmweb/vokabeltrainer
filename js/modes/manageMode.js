@@ -514,7 +514,9 @@ export function mount(container) {
            <p class="hint" id="sync-status-text">–</p>
            <p class="hint" id="sync-counts-text"></p>
            <button class="btn btn-secondary" id="disconnect-btn">Trennen</button>
-           <button class="btn btn-secondary" id="sync-now-btn">Jetzt synchronisieren</button>`
+           <button class="btn btn-secondary" id="sync-now-btn">Jetzt synchronisieren</button>
+           <button class="btn btn-secondary" id="full-resync-btn">Vollständig neu abrufen</button>
+           <p class="hint">Falls die Zahl auf diesem Gerät dauerhaft niedriger bleibt als auf einem anderen: "Vollständig neu abrufen" holt wirklich alles nochmal frisch aus der Cloud. Löscht nichts, betrifft nur diesen einen Abgleich-Zwischenstand auf diesem Gerät.</p>`
         : `<p class="hint">Vokabeln zwischen Geräten abgleichen — mit dem Sync-Login anmelden, das in Firebase für diese App angelegt wurde (siehe SETUP-FIREBASE-SYNC.md).</p>
            <form id="login-form" class="add-form">
              <input type="email" id="email-input" placeholder="E-Mail" autocomplete="username" required />
@@ -530,6 +532,7 @@ export function mount(container) {
         renderAccountBox();
       });
       box.querySelector('#sync-now-btn').addEventListener('click', () => syncService.sync());
+      box.querySelector('#full-resync-btn').addEventListener('click', () => syncService.fullResync());
     } else {
       box.querySelector('#login-form').addEventListener('submit', async (e) => {
         e.preventDefault();

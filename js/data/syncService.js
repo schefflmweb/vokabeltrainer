@@ -127,6 +127,40 @@ export const syncService = {
     scheduleTimer = setTimeout(() => this.sync(), SCHEDULE_DEBOUNCE_MS);
   },
 
+  /**
+   * Resets this device's local "synced up to here" bookmark for every
+   * collection and re-pulls everything from Firestore from scratch. Purely
+   * local and safe — unlike the old GitHub-Gist-era "Sync zurücksetzen",
+   * nothing in Firestore is deleted or overwritten, only this device's own
+   * cursor is rewound.
+   *
+   * Exists because the incremental pull's cursor always advances to "now"
+   * after a pull completes, regardless of whether that specific pull
+   * actually captured every matching record a fully correct query would
+   * have. If any one pull is ever incomplete for any reason (a transient
+   * network hiccup, the tab being suspended mid-fetch, or anything else
+   * that lets the call resolve without throwing but with fewer documents
+   * than truly exist), the records it missed fall below that device's
+   * cursor and are silently, permanently excluded from every later
+   * incremental sync on that specific device — even though they were never
+   * actually lost from Firestore, just no longer reachable by this
+   * device's own incremental query.
+   */
+  fullResync() {
+    if (syncPromise) return syncPromise.then(() => this.fullResync());
+    syncPromise = this._runFullResync().finally(() => {
+      syncPromise = null;
+    });
+    return syncPromise;
+  },
+
+  async _runFullResync() {
+    for (const { collectionName } of COLLECTIONS) {
+      await db.setMeta(`firestoreCursor_${collectionName}`, 0);
+    }
+    return this._runSync();
+  },
+
   async _runSync() {
     await firebaseAuth.ready();
     if (!firebaseAuth.isConfigured()) {

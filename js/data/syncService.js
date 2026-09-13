@@ -22,12 +22,19 @@ const GIST_DESCRIPTION = 'Vokabeltrainer-Daten (bitte nicht löschen)';
  * talks to api.github.com, which does support this properly.
  *
  * GitHub doesn't document the exact threshold precisely (commonly cited as
- * ~1MB), and a byte-accurate chunk targeting 800KB still got truncated in
- * practice — so this stays well clear of it with a large margin rather than
- * chasing the exact real number, since smaller files cost nothing but a
- * few more of them in the gist.
+ * ~1MB); byte-accurate chunks targeting 800KB, then 200KB, both still got
+ * truncated in practice. Gone much smaller here — cheap, since smaller
+ * files cost nothing but a few more of them in the gist.
  */
-const MAX_FILE_BYTES = 200 * 1024;
+const MAX_FILE_BYTES = 50 * 1024;
+
+/**
+ * Also caps how many bytes go into a single PATCH request, splitting into
+ * several requests if needed — in case it's not really any one file's size
+ * that matters but the total size of one write, which sending many chunks
+ * in a single request would still hit even with small individual files.
+ */
+const MAX_PATCH_BYTES = 150 * 1024;
 
 /** Each collection's records are stored as `<baseFileName>.json`, `<baseFileName>.part1.json`, `<baseFileName>.part2.json`, ... as needed. */
 const COLLECTIONS = [
@@ -167,26 +174,48 @@ async function fetchGistFiles(token, gistId, attempt = 0) {
 
 const VERIFY_TRUNCATION_DELAYS_MS = [2000, 2000, 3000];
 
-/**
- * Pushes files, then does a genuine, separate GET to verify none of them
- * come back truncated — the PATCH response's own echoed file list turned
- * out not to reflect real truncation (a file could look fine right in the
- * PATCH response and still show up truncated on the very next plain read),
- * so only an actual follow-up GET can be trusted. Even that isn't
- * necessarily final right away, though — the same kind of read-after-write
- * lag that makes a GET 404 right after a gist is created can, it seems,
- * also affect whether GitHub has finished deciding a just-written file
- * needs to be truncated. So this waits a little before checking, and if it
- * does find something truncated, waits and checks again a few times before
- * concluding it's real — favoring a slower sync over a false alarm.
- */
-async function pushGistFiles(token, gistId, filesPayload) {
+async function pushGistFilesOnce(token, gistId, batchPayload) {
   const res = await fetchWithRetry(`${API_BASE}/gists/${gistId}`, {
     method: 'PATCH',
     headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ files: filesPayload })
+    body: JSON.stringify({ files: batchPayload })
   });
   if (!res.ok) throw new Error(httpErrorMessage(res, 'GitHub-Speichern fehlgeschlagen'));
+}
+
+/**
+ * Pushes files — split across several smaller PATCH requests if the total
+ * would exceed MAX_PATCH_BYTES, in case it's the size of one whole write
+ * rather than any individual file that matters — then does a genuine,
+ * separate GET to verify none of them come back truncated. The PATCH
+ * response's own echoed file list turned out not to reflect real
+ * truncation (a file could look fine right in a PATCH response and still
+ * show up truncated on the very next plain read), so only an actual
+ * follow-up GET can be trusted. Even that isn't necessarily final right
+ * away, though — the same kind of read-after-write lag that makes a GET
+ * 404 right after a gist is created can, it seems, also affect whether
+ * GitHub has finished deciding a just-written file needs to be truncated.
+ * So this waits a little before checking, and if it does find something
+ * truncated, waits and checks again a few times before concluding it's
+ * real — favoring a slower sync over a false alarm.
+ */
+async function pushGistFiles(token, gistId, filesPayload) {
+  const entries = Object.entries(filesPayload);
+  let batch = {};
+  let batchBytes = 0;
+  for (const [name, val] of entries) {
+    const entryBytes = val ? utf8ByteLength(val.content) : 0;
+    if (Object.keys(batch).length > 0 && batchBytes + entryBytes > MAX_PATCH_BYTES) {
+      await pushGistFilesOnce(token, gistId, batch);
+      batch = {};
+      batchBytes = 0;
+    }
+    batch[name] = val;
+    batchBytes += entryBytes;
+  }
+  if (Object.keys(batch).length > 0) {
+    await pushGistFilesOnce(token, gistId, batch);
+  }
 
   let truncatedNames = [];
   for (let attempt = 0; attempt <= VERIFY_TRUNCATION_DELAYS_MS.length; attempt++) {

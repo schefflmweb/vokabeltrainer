@@ -152,11 +152,13 @@ async function fetchGistFiles(token, gistId) {
 }
 
 /**
- * Pushes files and checks GitHub's own response for any that came back
- * truncated — the PATCH response already includes the full updated file
- * list, so this is a free self-check, no extra request. Catches a chunk
- * that's still too large on the very sync that wrote it, instead of only
- * surfacing on some later device trying to read it back.
+ * Pushes files, then does a genuine, separate GET to verify none of them
+ * come back truncated — the PATCH response's own echoed file list turned
+ * out not to reflect real truncation (a file could look fine right in the
+ * PATCH response and still show up truncated on the very next plain read,
+ * on this device or another), so only an actual follow-up GET can be
+ * trusted. Costs one extra request per sync, but catches an oversized
+ * chunk on the device that wrote it instead of only ever surfacing later.
  */
 async function pushGistFiles(token, gistId, filesPayload) {
   const res = await fetchWithRetry(`${API_BASE}/gists/${gistId}`, {
@@ -165,8 +167,9 @@ async function pushGistFiles(token, gistId, filesPayload) {
     body: JSON.stringify({ files: filesPayload })
   });
   if (!res.ok) throw new Error(httpErrorMessage(res, 'GitHub-Speichern fehlgeschlagen'));
-  const gist = await res.json();
-  const truncatedNames = Object.entries(gist.files || {})
+
+  const verifyFiles = await fetchGistFiles(token, gistId);
+  const truncatedNames = Object.entries(verifyFiles)
     .filter(([, file]) => file.truncated)
     .map(([name]) => name);
   if (truncatedNames.length > 0) {

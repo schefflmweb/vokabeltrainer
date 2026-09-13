@@ -13,55 +13,8 @@ function normalizeQuestion(question) {
   return question.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-/**
- * Loads the bundled starter set exactly once, ever — tracked via a meta
- * flag rather than "seed if the store is empty". Vocab used the latter
- * originally and it backfired: deleting everything left the store empty
- * again, so the next launch silently re-seeded it, and — worse — synced
- * that fresh copy could outrace a genuine delete-tombstone from another
- * device and resurrect words the user had deliberately removed. A one-time
- * flag means deleting the starter grammar set (or all of it) sticks on the
- * device it happened on — but with multiple devices, seeding a SECOND or
- * THIRD device still risks a variant of the same bug: that device seeds its
- * own fresh local copy (with today's timestamp) before it has ever synced,
- * so if it then pulls a delete-tombstone (or reviewed progress) for the
- * same starter item from another device, mergeFromRemote's last-write-wins
- * would wrongly prefer the fresh-but-stale local seed over the genuinely
- * newer remote state. Stamping seeded records with updatedAt: 0 (instead of
- * "now") closes that gap: a first-ever device still keeps its seed (nothing
- * to compare against remotely), but any later device always defers to
- * whatever real remote history already exists for that item.
- */
-async function seedIfNeeded() {
-  const already = await db.getMeta('grammarSeeded');
-  if (already) return;
-  await db.setMeta('grammarSeeded', true);
-  const res = await fetch('./data/starter-grammar.json').catch(() => null);
-  if (!res || !res.ok) return;
-  const starter = await res.json().catch(() => []);
-  const now = Date.now();
-  const records = starter.map((item) => ({
-    ...item,
-    source: 'starter',
-    deleted: false,
-    createdAt: now,
-    updatedAt: 0,
-    dirty: false,
-    srs: defaultSrs()
-  }));
-  await db.putAll(records, STORE);
-}
-
-const seedPromise = seedIfNeeded();
-
 export const grammarStore = {
-  /** Resolves once the one-time starter seeding attempt (see seedIfNeeded) has finished. */
-  ready() {
-    return seedPromise;
-  },
-
   async getAll() {
-    await seedPromise;
     const all = await db.getAll(STORE);
     return all.filter((g) => !g.deleted);
   },
@@ -71,7 +24,7 @@ export const grammarStore = {
     return [...new Set(all.map((g) => g.topic).filter(Boolean))].sort();
   },
 
-  /** Builds a practice session: due items first, then unseen/everything else, shuffled — same due→fallback shuffle vocab uses so a freshly-seeded batch doesn't show the same fixed order every time. */
+  /** Builds a practice session: due items first, then unseen/everything else, shuffled — same due→fallback shuffle vocab uses so a freshly-imported batch doesn't show the same fixed order every time. */
   async getSession(limit = 12, topic = null, now = Date.now()) {
     const all = await this.getAll();
     const pool = topic ? all.filter((g) => g.topic === topic) : all;

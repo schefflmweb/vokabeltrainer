@@ -312,7 +312,7 @@ export function mount(container) {
 
         <section>
           <h3><span class="icon-inline-wrap">${bookIcon}</span> Grammatik (<span id="grammar-count">${grammarCount}</span>)</h3>
-          <p class="hint">Eigene Übungen per CSV importieren, zusätzlich zum eingebauten Grundstock. Spalten: Thema, Frage (___ für die Lücke), Option1, Option2, Option3, Option4, Richtig (1-4), Erklärung (optional)</p>
+          <p class="hint">Übungen per CSV importieren. Spalten: Thema, Frage (___ für die Lücke), Option1, Option2, Option3, Option4, Richtig (1-4), Erklärung (optional)</p>
           <input type="file" id="grammar-csv-file" accept=".csv,text/csv" />
           <textarea id="grammar-csv-text" rows="4" placeholder="Präpositionen,I was born ___ 1995.,in,on,at,since,1,Jahre: in"></textarea>
           <button class="btn btn-secondary" id="grammar-csv-import-btn">Importieren</button>

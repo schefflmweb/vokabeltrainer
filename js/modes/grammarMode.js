@@ -13,7 +13,7 @@ export function mount(container) {
   let queue = [];
   let index = -1;
   let stats = { known: 0, unknown: 0 };
-  let phase = 'select'; // 'select' | 'active' | 'finished'
+  let phase = 'select'; // 'select' | 'active' | 'finished' | 'empty'
   let topics = [];
   let selectedTopic = '';
   let answered = false;
@@ -28,7 +28,7 @@ export function mount(container) {
     index = 0;
     stats = { known: 0, unknown: 0 };
     answered = false;
-    phase = queue.length > 0 ? 'active' : 'finished';
+    phase = queue.length > 0 ? 'active' : 'empty';
     render();
   }
 
@@ -53,6 +53,7 @@ export function mount(container) {
   function render() {
     if (phase === 'select') return renderSelect();
     if (phase === 'finished') return renderFinished();
+    if (phase === 'empty') return renderEmpty();
     return renderQuestion();
   }
 
@@ -75,6 +76,16 @@ export function mount(container) {
     container.querySelector('#start-btn').addEventListener('click', startSession);
   }
 
+  function renderEmpty() {
+    container.innerHTML = `
+      <div class="quiz-mode pad center">
+        <h2 class="btn-with-icon"><span class="icon-inline-wrap icon-lg">${bookIcon}</span> Noch keine Übungen</h2>
+        <p class="hint">Importiere welche unter Verwalten → Grammatik (CSV).</p>
+        <button class="btn btn-secondary" id="switch-btn">Zurück</button>
+      </div>`;
+    container.querySelector('#switch-btn').addEventListener('click', backToSelect);
+  }
+
   function renderFinished() {
     container.innerHTML = `
       <div class="quiz-mode pad center">
@@ -89,7 +100,7 @@ export function mount(container) {
 
   function renderQuestion() {
     const item = currentItem();
-    // Shuffled once per question — CSV/starter data typically lists the
+    // Shuffled once per question — imported CSV data typically lists the
     // correct option in a fixed spot (often first), which would otherwise
     // make the answer guessable by position alone.
     displayOrder = shuffle(item.options.map((_, i) => i));
@@ -141,7 +152,6 @@ export function mount(container) {
   }
 
   (async () => {
-    await grammarStore.ready();
     topics = await grammarStore.getTopics();
     render();
   })();

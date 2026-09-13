@@ -66,6 +66,9 @@ function firestoreErrorMessage(err) {
   if (code === 'unavailable' || code === 'failed-precondition' || code === 'deadline-exceeded') {
     return 'Keine Verbindung zu Firebase möglich — bitte kurz erneut versuchen.';
   }
+  if (code === 'resource-exhausted') {
+    return 'Tageslimit von Firebase erreicht (kostenlose Stufe: 50.000 Lesevorgänge/Tag) — bitte bis Mitternacht Pazifik-Zeit warten oder in der Firebase-Konsole auf den Blaze-Tarif upgraden. Vokabeln sind dadurch nicht verloren, nur der Sync pausiert bis dahin.';
+  }
   return err?.message || 'Sync-Fehler – arbeitet lokal weiter';
 }
 

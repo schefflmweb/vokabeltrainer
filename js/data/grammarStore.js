@@ -24,6 +24,12 @@ export const grammarStore = {
     return [...new Set(all.map((g) => g.topic).filter(Boolean))].sort();
   },
 
+  /** A random subset, for callers that just need "a few grammar questions" without loading the whole collection — same samplePool-based pattern as vocabStore/idiomStore's getSample(). Used by the Bierdeckel-Challenge's grammar pot. */
+  async getSample(cap = 50) {
+    const pool = await db.samplePool(STORE, cap);
+    return pool.filter((g) => !g.deleted);
+  },
+
   /** Builds a practice session: due items first, then unseen/everything else, shuffled — same due→fallback shuffle vocab uses so a freshly-imported batch doesn't show the same fixed order every time. */
   async getSession(limit = 12, topic = null, now = Date.now()) {
     const all = await this.getAll();

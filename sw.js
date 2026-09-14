@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'vokabeltrainer-v39';
+const CACHE_VERSION = 'vokabeltrainer-v40';
 const APP_SHELL = [
   './',
   './index.html',
@@ -12,6 +12,9 @@ const APP_SHELL = [
   './js/data/grammarStore.js',
   './js/data/idiomStore.js',
   './js/data/practicePool.js',
+  './js/data/challengeQuestions.js',
+  './js/data/distractorPairs.js',
+  './js/data/challengeStore.js',
   './js/data/syncService.js',
   './js/data/firebaseClient.js',
   './js/auth/firebaseAuth.js',
@@ -27,6 +30,7 @@ const APP_SHELL = [
   './js/modes/audioMode.js',
   './js/modes/quizMode.js',
   './js/modes/grammarMode.js',
+  './js/modes/challengeMode.js',
   './js/modes/manageMode.js',
   './js/csv/csvImport.js',
   './icons/icon-192.png',

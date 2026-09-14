@@ -60,5 +60,16 @@ export const toneService = {
 
   playIncorrect() {
     playTone([220, 165]); // short descending buzz
+  },
+
+  /** A coaster landing on the Bierdeckel-Challenge tower — pitch drops slightly as the tower grows, like a taller stack sounding duller/heavier. */
+  playCoasterPlace(height = 0) {
+    const freq = 320 - Math.min(height, 20) * 6;
+    playTone([freq], 0.07, 0.14);
+  },
+
+  /** The tower collapsing — a short tumbling descent. */
+  playCollapse() {
+    playTone([280, 230, 190, 150, 110], 0.09, 0.2);
   }
 };

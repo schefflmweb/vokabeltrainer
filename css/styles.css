@@ -970,3 +970,157 @@ textarea:focus {
   background: var(--accent-gradient);
   color: var(--accent-text);
 }
+
+/* --- Bierdeckel-Challenge --- */
+
+.tower-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 22px;
+  min-height: 40px;
+}
+
+.tower {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 2px;
+  transform-origin: bottom center;
+}
+
+.coaster {
+  width: 74px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transform: translateX(var(--offset, 0px));
+}
+
+.coaster-checkpoint {
+  height: 16px;
+  background: var(--success-gradient);
+  border-color: var(--success);
+}
+
+.tower-ground {
+  width: 110px;
+  height: 6px;
+  background: var(--text-muted);
+  opacity: 0.35;
+  border-radius: 3px;
+  margin-top: 3px;
+}
+
+.tower-height-label {
+  margin: 2px 0 0;
+}
+
+.tower-best-line {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  border-top: 2px dashed var(--accent);
+}
+
+.tower-best-line span {
+  position: absolute;
+  right: 0;
+  top: -17px;
+  font-size: 0.68rem;
+  color: var(--accent-text);
+  background: var(--bg);
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+@keyframes towerWobbleLight {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(0.6deg); }
+}
+
+@keyframes towerWobbleMedium {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(1.5deg); }
+}
+
+@keyframes towerWobbleStrong {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-2.4deg); }
+  75% { transform: rotate(2.4deg); }
+}
+
+.tower.wobble-light { animation: towerWobbleLight 2.6s ease-in-out infinite; }
+.tower.wobble-medium { animation: towerWobbleMedium 1.8s ease-in-out infinite; }
+.tower.wobble-strong { animation: towerWobbleStrong 1.1s ease-in-out infinite; }
+
+@keyframes coasterFallLeft {
+  to { transform: translate(-60px, 130px) rotate(-50deg); opacity: 0; }
+}
+
+@keyframes coasterFallRight {
+  to { transform: translate(60px, 130px) rotate(50deg); opacity: 0; }
+}
+
+.coaster-falling:nth-child(even) { animation: coasterFallLeft 0.7s ease-in forwards; }
+.coaster-falling:nth-child(odd) { animation: coasterFallRight 0.7s ease-in forwards; }
+
+.challenge-timer {
+  margin-bottom: 2px;
+}
+
+.progress-bar.timer-urgent {
+  background: var(--danger-gradient);
+}
+
+.wager-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.wager-btn {
+  font-size: 0.85rem;
+}
+
+.wager-btn.active {
+  background: var(--accent-gradient);
+  color: var(--accent-text);
+  font-weight: 700;
+  border-color: transparent;
+}
+
+.golden-btn.active {
+  background: linear-gradient(135deg, #fde68a 0%, #fbbf24 100%);
+  color: #78350f;
+  border-color: transparent;
+}
+
+.wager-active-hint {
+  font-weight: 700;
+  color: var(--accent-text);
+}
+
+.challenge-error-list {
+  text-align: left;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-height: 160px;
+  overflow-y: auto;
+  width: 100%;
+}
+
+.challenge-error-list ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.new-best-hint {
+  font-weight: 800;
+  color: var(--success-text);
+  font-size: 1.1rem;
+}

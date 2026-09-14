@@ -135,3 +135,10 @@ export const quoteIcon = icon(`
   <path d="M5 11c0-3 2-5 5-5.5M5 11v4a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2H6"/>
   <path d="M14 11c0-3 2-5 5-5.5M14 11v4a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-2"/>
 `);
+
+export const towerIcon = icon(`
+  <ellipse cx="12" cy="19" rx="8" ry="2.2"/>
+  <ellipse cx="12" cy="14.7" rx="6.4" ry="1.9"/>
+  <ellipse cx="12" cy="10.7" rx="4.8" ry="1.6"/>
+  <ellipse cx="12" cy="7.2" rx="3.2" ry="1.3"/>
+`);

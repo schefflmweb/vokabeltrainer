@@ -2,10 +2,11 @@ import { syncService } from './data/syncService.js';
 import * as audioMode from './modes/audioMode.js';
 import * as quizMode from './modes/quizMode.js';
 import * as grammarMode from './modes/grammarMode.js';
+import * as challengeMode from './modes/challengeMode.js';
 import * as manageMode from './modes/manageMode.js';
 import { refreshIcon } from './ui/icons.js';
 
-const modes = { audio: audioMode, quiz: quizMode, grammar: grammarMode, manage: manageMode };
+const modes = { audio: audioMode, quiz: quizMode, grammar: grammarMode, challenge: challengeMode, manage: manageMode };
 const view = document.getElementById('view');
 const navButtons = document.querySelectorAll('.nav-btn');
 

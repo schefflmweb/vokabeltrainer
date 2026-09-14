@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'vokabeltrainer-v42';
+const CACHE_VERSION = 'vokabeltrainer-v43';
 const APP_SHELL = [
   './',
   './index.html',

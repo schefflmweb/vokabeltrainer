@@ -1003,6 +1003,23 @@ textarea:focus {
   height: 40px;
 }
 
+/* Contact shadow where the pair touches whatever it stands on. */
+.coaster-triangle::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  bottom: -1px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(51, 47, 77, 0.22);
+  filter: blur(2px);
+}
+
+.coaster-triangle-falling::after {
+  opacity: 0;
+}
+
 /* Both legs pivot around their own bottom centre, placed so that each one's
    top centre lands on the same point (44/2 = 22px across, 40·cos24° ≈ 37px
    up) — they meet in one apex instead of sweeping past each other. */
@@ -1014,7 +1031,10 @@ textarea:focus {
   border-radius: 2px;
   background: var(--accent-gradient);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.6),
+    inset -1px -1px 3px rgba(51, 47, 77, 0.16),
+    var(--shadow-sm);
   transform-origin: bottom center;
 }
 
@@ -1023,9 +1043,12 @@ textarea:focus {
   transform: rotate(24deg);
 }
 
+/* Light falls from the top left, so the far coaster of each pair sits in
+   its partner's shade. */
 .coaster-leg.right {
   left: 33px;
   transform: rotate(-24deg);
+  filter: brightness(0.88);
 }
 
 .coaster-triangle-checkpoint .coaster-leg {
@@ -1045,17 +1068,20 @@ textarea:focus {
   border-radius: 2px;
   background: var(--accent-gradient);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -2px 2px rgba(51, 47, 77, 0.14),
+    0 3px 5px -1px rgba(51, 47, 77, 0.28);
 }
 
 .tower-ground {
-  width: 130px;
-  height: 6px;
-  background: var(--text-muted);
-  opacity: 0.35;
+  width: 150px;
+  height: 5px;
+  background: linear-gradient(90deg, transparent, var(--text-muted) 18%, var(--text-muted) 82%, transparent);
+  opacity: 0.45;
   border-radius: 3px;
-  margin-top: 3px;
-  box-shadow: 0 10px 14px -4px rgba(0, 0, 0, 0.25);
+  margin-top: 2px;
+  box-shadow: 0 6px 10px -3px rgba(51, 47, 77, 0.3);
 }
 
 .tower-height-label {

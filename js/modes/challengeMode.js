@@ -238,24 +238,72 @@ export function mount(container) {
 
   // --- Rendering ---
 
-  function coasterEl(levelIndex, opts = {}) {
+  // A real coaster tower is built from A-frame triangles (two coasters leaned
+  // against each other), several triangles side by side per row, with the
+  // next (narrower) row resting on a bridge across the row below — a stepped
+  // pyramid. TIER_CAPACITIES (bottom to top) sums to exactly MAX_HEIGHT, so
+  // every height point maps to one more triangle somewhere in the pyramid.
+  const TIER_CAPACITIES = [6, 5, 4, 3, 2];
+  const TRIANGLE_H = 44;
+  const TIER_GAP = 6;
+  const BRIDGE_H = 8;
+
+  function buildTiers(displayHeight) {
+    const tiers = [];
+    let consumed = 0;
+    for (const cap of TIER_CAPACITIES) {
+      const count = Math.max(0, Math.min(cap, displayHeight - consumed));
+      tiers.push({ cap, count, start: consumed + 1 });
+      consumed += cap;
+      if (displayHeight <= consumed) break;
+    }
+    return tiers;
+  }
+
+  function bestLineOffset(height) {
+    let consumed = 0;
+    let offsetPx = 0;
+    for (let idx = 0; idx < TIER_CAPACITIES.length; idx++) {
+      const cap = TIER_CAPACITIES[idx];
+      if (height <= consumed + cap) return offsetPx;
+      offsetPx += TRIANGLE_H + TIER_GAP;
+      if (idx < TIER_CAPACITIES.length - 1) offsetPx += BRIDGE_H + TIER_GAP;
+      consumed += cap;
+    }
+    return offsetPx;
+  }
+
+  function triangleEl(levelIndex, opts = {}) {
     const isCheckpoint = CHECKPOINTS.includes(levelIndex);
-    const offset = ((levelIndex * 37) % 11) - 5;
     const falling = opts.collapseAbove != null && levelIndex > opts.collapseAbove;
-    return `<div class="coaster${isCheckpoint ? ' coaster-checkpoint' : ''}${falling ? ' coaster-falling' : ''}" style="--offset:${offset}px"></div>`;
+    const jitter = ((levelIndex * 47) % 7) - 3;
+    const cls = ['coaster-triangle', isCheckpoint && 'coaster-triangle-checkpoint', falling && 'coaster-triangle-falling']
+      .filter(Boolean).join(' ');
+    return `<div class="${cls}" style="--jitter:${jitter}deg">
+      <div class="coaster-leg left"></div>
+      <div class="coaster-leg right"></div>
+    </div>`;
   }
 
   function towerHtml(displayHeight, opts = {}) {
     const wobbleClass = displayHeight >= 15 ? 'wobble-strong' : displayHeight >= 10 ? 'wobble-medium' : displayHeight >= 5 ? 'wobble-light' : '';
-    let coasters = '';
-    for (let i = 1; i <= displayHeight; i++) coasters += coasterEl(i, opts);
+    const tiers = buildTiers(displayHeight);
+    let rows = '';
+    tiers.forEach((tier, idx) => {
+      if (tier.count <= 0) return;
+      let triangles = '';
+      for (let i = 0; i < tier.count; i++) triangles += triangleEl(tier.start + i, opts);
+      rows += `<div class="coaster-tier">${triangles}</div>`;
+      const isTopTier = idx === TIER_CAPACITIES.length - 1;
+      if (tier.count === tier.cap && !isTopTier) rows += `<div class="tier-bridge"></div>`;
+    });
     const bestMarker = bestHeight > 0 && bestHeight <= MAX_HEIGHT
-      ? `<div class="tower-best-line" style="bottom:${bestHeight * 18}px"><span>Bestwert ${bestHeight}</span></div>`
+      ? `<div class="tower-best-line" style="bottom:${bestLineOffset(bestHeight)}px"><span>Bestwert ${bestHeight}</span></div>`
       : '';
     return `
       <div class="tower-wrap">
         ${bestMarker}
-        <div class="tower ${wobbleClass}">${coasters}</div>
+        <div class="tower ${wobbleClass}">${rows}</div>
         <div class="tower-ground"></div>
       </div>
       <p class="hint center-text tower-height-label">Höhe ${displayHeight}</p>`;

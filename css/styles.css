@@ -980,72 +980,72 @@ textarea:focus {
   align-items: center;
   padding-top: 22px;
   min-height: 40px;
-  perspective: 700px;
 }
 
 .tower {
   display: flex;
   flex-direction: column-reverse;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   transform-origin: bottom center;
-  transform-style: preserve-3d;
 }
 
 .coaster-tier {
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  gap: 3px;
-  transform: rotateX(12deg);
-  transform-origin: center bottom;
-  transform-style: preserve-3d;
+  gap: 4px;
 }
 
 .coaster-triangle {
   position: relative;
-  width: 34px;
-  height: 44px;
-  transform: rotate(var(--jitter, 0deg));
+  width: 44px;
+  height: 40px;
 }
 
+/* Both legs pivot around their own bottom centre, placed so that each one's
+   top centre lands on the same point (44/2 = 22px across, 40·cos24° ≈ 37px
+   up) — they meet in one apex instead of sweeping past each other. */
 .coaster-leg {
   position: absolute;
   bottom: 0;
-  width: 15px;
-  height: 42px;
-  border-radius: 3px 3px 2px 2px;
-  background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--accent) 55%, var(--accent) 100%);
+  width: 11px;
+  height: 40px;
+  border-radius: 2px;
+  background: var(--accent-gradient);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm), inset 2px 0 3px rgba(255, 255, 255, 0.18), inset -2px 0 4px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-sm);
+  transform-origin: bottom center;
 }
 
 .coaster-leg.left {
-  left: 1px;
-  transform-origin: bottom left;
-  transform: rotate(-29deg);
+  left: 0;
+  transform: rotate(24deg);
 }
 
 .coaster-leg.right {
-  right: 1px;
-  transform-origin: bottom right;
-  transform: rotate(29deg);
+  left: 33px;
+  transform: rotate(-24deg);
 }
 
 .coaster-triangle-checkpoint .coaster-leg {
-  background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--success) 55%, var(--success) 100%);
+  background: var(--success-gradient);
   border-color: var(--success);
 }
 
-.tier-bridge {
-  width: 40px;
-  height: 8px;
-  margin: 0 auto;
+.tier-plates {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.tier-plate {
+  width: 44px;
+  height: 7px;
   border-radius: 2px;
-  background: linear-gradient(180deg, var(--text-muted), transparent);
-  opacity: 0.45;
-  transform: rotateX(12deg);
-  transform-origin: center bottom;
+  background: var(--accent-gradient);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
 }
 
 .tower-ground {
@@ -1110,6 +1110,8 @@ textarea:focus {
 
 .coaster-triangle-falling .coaster-leg.left { animation: coasterFallLeft 0.7s ease-in forwards; }
 .coaster-triangle-falling .coaster-leg.right { animation: coasterFallRight 0.7s ease-in forwards; }
+.tier-plate-falling:nth-child(odd) { animation: coasterFallLeft 0.7s ease-in forwards; }
+.tier-plate-falling:nth-child(even) { animation: coasterFallRight 0.7s ease-in forwards; }
 
 .challenge-timer {
   margin-bottom: 2px;

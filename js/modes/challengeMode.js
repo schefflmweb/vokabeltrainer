@@ -244,9 +244,9 @@ export function mount(container) {
   // pyramid. TIER_CAPACITIES (bottom to top) sums to exactly MAX_HEIGHT, so
   // every height point maps to one more triangle somewhere in the pyramid.
   const TIER_CAPACITIES = [6, 5, 4, 3, 2];
-  const TRIANGLE_H = 44;
-  const TIER_GAP = 6;
-  const BRIDGE_H = 8;
+  const TRIANGLE_H = 40;
+  const TIER_GAP = 4;
+  const BRIDGE_H = 7;
 
   function buildTiers(displayHeight) {
     const tiers = [];
@@ -276,10 +276,9 @@ export function mount(container) {
   function triangleEl(levelIndex, opts = {}) {
     const isCheckpoint = CHECKPOINTS.includes(levelIndex);
     const falling = opts.collapseAbove != null && levelIndex > opts.collapseAbove;
-    const jitter = ((levelIndex * 47) % 7) - 3;
     const cls = ['coaster-triangle', isCheckpoint && 'coaster-triangle-checkpoint', falling && 'coaster-triangle-falling']
       .filter(Boolean).join(' ');
-    return `<div class="${cls}" style="--jitter:${jitter}deg">
+    return `<div class="${cls}">
       <div class="coaster-leg left"></div>
       <div class="coaster-leg right"></div>
     </div>`;
@@ -295,7 +294,15 @@ export function mount(container) {
       for (let i = 0; i < tier.count; i++) triangles += triangleEl(tier.start + i, opts);
       rows += `<div class="coaster-tier">${triangles}</div>`;
       const isTopTier = idx === TIER_CAPACITIES.length - 1;
-      if (tier.count === tier.cap && !isTopTier) rows += `<div class="tier-bridge"></div>`;
+      if (tier.count === tier.cap && !isTopTier) {
+        // One flat coaster per triangle of the row above, so each plate lands
+        // where a triangle actually rests on it. Before that row exists, a
+        // single plate already sits there, ready for the next triangle.
+        const plateCount = Math.max(1, tiers[idx + 1]?.count ?? 0);
+        const plateFalls = opts.collapseAbove != null && tier.start + tier.cap - 1 >= opts.collapseAbove;
+        const plate = `<div class="tier-plate${plateFalls ? ' tier-plate-falling' : ''}"></div>`;
+        rows += `<div class="tier-plates">${plate.repeat(plateCount)}</div>`;
+      }
     });
     const bestMarker = bestHeight > 0 && bestHeight <= MAX_HEIGHT
       ? `<div class="tower-best-line" style="bottom:${bestLineOffset(bestHeight)}px"><span>Bestwert ${bestHeight}</span></div>`

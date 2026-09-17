@@ -987,6 +987,69 @@ textarea:focus {
   margin: 0;
 }
 
+.cannon-warning {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--danger-text);
+  background: var(--danger-gradient);
+  border-radius: 12px;
+  padding: 8px 12px;
+}
+
+/* The typed answer, shown coloured for the moment before the tower page. */
+.cannon-answer {
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  border: 2px solid var(--border);
+}
+
+.cannon-answer.correct {
+  border-color: var(--success);
+  color: var(--success-text);
+}
+
+.cannon-answer.incorrect {
+  border-color: var(--danger);
+  color: var(--danger-text);
+}
+
+.cannon-field {
+  position: relative;
+  width: 100%;
+}
+
+@keyframes cannonballFlight {
+  from { transform: translate(-60vw, -40px); }
+  to { transform: translate(0, 0); }
+}
+
+@keyframes cannonballBurst {
+  from { transform: scale(1); opacity: 0.9; }
+  to { transform: scale(4); opacity: 0; }
+}
+
+.cannonball {
+  position: absolute;
+  left: 50%;
+  bottom: 90px;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #6b7280, #1f2937 70%);
+  box-shadow: 0 2px 6px rgba(31, 41, 55, 0.5);
+  animation: cannonballFlight 0.55s linear;
+}
+
+.cannonball-hit {
+  animation: cannonballBurst 0.5s ease-out forwards;
+}
+
 .tower-wrap {
   position: relative;
   display: flex;

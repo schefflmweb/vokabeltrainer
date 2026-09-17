@@ -2,6 +2,7 @@ import { getNextQuestion } from '../data/challengeQuestions.js';
 import { challengeStore } from '../data/challengeStore.js';
 import { toneService } from '../audio/toneService.js';
 import { progressBarHtml } from '../ui/progressBar.js';
+import { answersMatch } from '../util/answerMatch.js';
 import {
   playIcon, refreshIcon, starIcon, checkCircleIcon, xCircleIcon, hourglassIcon, warningIcon
 } from '../ui/icons.js';
@@ -23,6 +24,21 @@ const TIMER_SECONDS_MEDIUM = 15;
 // How long the answer stays coloured on the question screen before the tower page takes over.
 const REVEAL_FLASH_MS = 200;
 const TIMER_SECONDS_HARD = 10;
+
+// Cannon rounds: no options, type the word yourself. Get it wrong and a
+// cannonball takes out a random row — and everything resting on it.
+const CANNON_MIN_HEIGHT = 6;
+const CANNON_CHANCE = 0.3;
+const CANNON_REWARD = 2;
+const TIMER_SECONDS_CANNON = 25;
+const CANNON_FLIGHT_MS = 550;
+const CANNON_IMPACT_MS = 900;
+
+// Gusts: between two questions the tower can be caught by the wind, and only
+// a quick right answer keeps the top row on.
+const WIND_MIN_HEIGHT = 12;
+const WIND_CHANCE = 0.2;
+const WIND_SECONDS = 6;
 
 function computeDelta(correct, height, wagerMode) {
   if (wagerMode === 'golden') return correct ? 2 : -5;
@@ -67,9 +83,29 @@ export function mount(container) {
   let bossCorrect = null;
   let timerHandle = null;
   let timerRemaining = null;
+  let timerTotal = null;
   // Height before the current answer, so the tower page can animate whatever it just gained.
   let heightBeforeAnswer = 0;
   let stackingHandle = null;
+  // Cannon round state: the current question is typed, not picked.
+  let cannonQuestion = false;
+  let typedAnswer = '';
+  let cannonStage = null; // 'incoming' | 'impact'
+  let cannonTargetHeight = 0;
+  let cannonHandle = null;
+  // Gust state
+  let windQuestion = null;
+  let windSelected = null;
+  let windJustHappened = false;
+  // Replaces the plain answer feedback on the tower page when a cannon or gust decided the outcome.
+  let towerEvent = null;
+
+  function clearCannonTimer() {
+    if (cannonHandle) {
+      clearTimeout(cannonHandle);
+      cannonHandle = null;
+    }
+  }
 
   function clearStackingTimer() {
     if (stackingHandle) {
@@ -84,28 +120,60 @@ export function mount(container) {
       timerHandle = null;
     }
     timerRemaining = null;
+    timerTotal = null;
+  }
+
+  function startCountdown(seconds, onExpire) {
+    clearTimer();
+    timerRemaining = seconds;
+    timerTotal = seconds;
+    timerHandle = setInterval(() => {
+      timerRemaining -= 1;
+      if (timerRemaining <= 0) {
+        clearTimer();
+        onExpire();
+      } else {
+        // Patching the bar in place rather than re-rendering keeps a half-typed
+        // cannon answer (and the keyboard focus) alive through every tick.
+        updateTimerDisplay();
+      }
+    }, 1000);
+  }
+
+  function updateTimerDisplay() {
+    const bar = container.querySelector('.challenge-timer .progress-bar');
+    const text = container.querySelector('.challenge-timer .progress-text');
+    if (!bar || !text) {
+      render();
+      return;
+    }
+    bar.style.width = `${Math.round((timerRemaining / timerTotal) * 100)}%`;
+    bar.classList.toggle('timer-urgent', timerRemaining <= 3);
+    text.textContent = `${timerRemaining}s`;
   }
 
   function startTimerIfNeeded() {
     clearTimer();
     if (height < TIMER_START_HEIGHT) return;
-    timerRemaining = height >= TIMER_HARD_HEIGHT ? TIMER_SECONDS_HARD : TIMER_SECONDS_MEDIUM;
-    timerHandle = setInterval(() => {
-      timerRemaining -= 1;
-      if (timerRemaining <= 0) {
-        submitAnswer(-1); // timeout counts as a wrong answer
-      } else {
-        render();
-      }
-    }, 1000);
+    // Typing takes longer than tapping an option, so cannon rounds get their own allowance.
+    const seconds = cannonQuestion
+      ? TIMER_SECONDS_CANNON
+      : (height >= TIMER_HARD_HEIGHT ? TIMER_SECONDS_HARD : TIMER_SECONDS_MEDIUM);
+    startCountdown(seconds, () => submitAnswer(-1)); // timeout counts as a wrong answer
   }
 
   function startSession() {
+    clearStackingTimer();
+    clearCannonTimer();
     height = 0;
     lastCheckpoint = 0;
     jokerUsed = false;
     goldenUsed = false;
     wagerMode = 'normal';
+    cannonQuestion = false;
+    typedAnswer = '';
+    towerEvent = null;
+    windJustHappened = false;
     sessionStats = { questionsAsked: 0, questionsCorrect: 0, wrongQuestions: [] };
     sessionStartedAt = Date.now();
     endReason = null;
@@ -125,9 +193,28 @@ export function mount(container) {
     selectedIndex = null;
     lastCorrect = null;
     lastDelta = null;
+    towerEvent = null;
+    typedAnswer = '';
+    windJustHappened = false;
+    // Grammar questions come with their own hand-written options, so only
+    // vocab and idioms can be turned into a typed cannon round.
+    cannonQuestion = q.pot !== 'grammar'
+      && height >= CANNON_MIN_HEIGHT
+      && Math.random() < CANNON_CHANCE;
     phase = 'active';
     startTimerIfNeeded();
     render();
+  }
+
+  function correctAnswerText(q) {
+    return q.options[q.correctIndex];
+  }
+
+  /** Cannon rounds are answered by typing; anything close enough counts (same tolerance as Quiz). */
+  function submitTypedAnswer(value) {
+    if (phase !== 'active') return;
+    typedAnswer = value;
+    submitAnswer(answersMatch(value, correctAnswerText(currentQuestion)) ? currentQuestion.correctIndex : -1);
   }
 
   function submitAnswer(index) {
@@ -137,17 +224,33 @@ export function mount(container) {
     const correct = index === currentQuestion.correctIndex;
     lastCorrect = correct;
     heightBeforeAnswer = Math.max(height, 0);
-    lastDelta = computeDelta(correct, height, wagerMode);
-    height += lastDelta;
-    lastCheckpoint = updateCheckpoint(lastCheckpoint, height);
+    lastDelta = cannonQuestion && correct ? CANNON_REWARD : computeDelta(correct, height, wagerMode);
     sessionStats.questionsAsked += 1;
     if (correct) {
       sessionStats.questionsCorrect += 1;
-      toneService.playCoasterPlace(Math.max(height, 0));
     } else {
       sessionStats.wrongQuestions.push(currentQuestion);
-      toneService.playIncorrect();
     }
+
+    // A missed cannon round isn't a plain deduction: the cannonball decides
+    // how much of the tower is left, so the height is set when it lands.
+    if (cannonQuestion && !correct) {
+      lastDelta = null;
+      toneService.playIncorrect();
+      phase = 'revealed';
+      render();
+      clearStackingTimer();
+      stackingHandle = setTimeout(() => {
+        stackingHandle = null;
+        if (phase === 'revealed') fireCannon();
+      }, REVEAL_FLASH_MS);
+      return;
+    }
+
+    height += lastDelta;
+    lastCheckpoint = updateCheckpoint(lastCheckpoint, height);
+    if (correct) toneService.playCoasterPlace(Math.max(height, 0));
+    else toneService.playIncorrect();
     // Show the answer colours just long enough to register, then hand the
     // whole screen over to the tower — it needs the room to grow.
     phase = 'revealed';
@@ -191,8 +294,110 @@ export function mount(container) {
     endSession();
   }
 
+  /** Cumulative heights at which each row of the pyramid is complete, e.g. [7, 13, 18, …]. */
+  function rowEnds() {
+    const ends = [];
+    let sum = 0;
+    for (const cap of TIER_CAPACITIES) {
+      sum += cap;
+      ends.push(sum);
+    }
+    return ends;
+  }
+
+  /** What's left standing when everything from `rowIndex` upward comes off. */
+  function heightBelowRow(rowIndex) {
+    return rowIndex === 0 ? 0 : rowEnds()[rowIndex - 1];
+  }
+
+  /** The row the topmost coaster sits in. */
+  function topRowIndex(h) {
+    const ends = rowEnds();
+    for (let i = 0; i < ends.length; i++) {
+      if (h <= ends[i]) return i;
+    }
+    return ends.length - 1;
+  }
+
+  /**
+   * A missed cannon round. The ball picks a row at random — checkpoints don't
+   * shield it — and everything from there up comes down with it.
+   */
+  function fireCannon() {
+    const standingRows = topRowIndex(Math.max(height, 0)) + 1;
+    const hitRow = Math.floor(Math.random() * standingRows);
+    cannonTargetHeight = heightBelowRow(hitRow);
+    cannonStage = 'incoming';
+    phase = 'cannon';
+    render();
+    clearCannonTimer();
+    cannonHandle = setTimeout(() => {
+      cannonStage = 'impact';
+      toneService.playCollapse();
+      render();
+      cannonHandle = setTimeout(() => {
+        cannonHandle = null;
+        const lost = Math.max(height, 0) - cannonTargetHeight;
+        heightBeforeAnswer = Math.max(height, 0);
+        height = cannonTargetHeight;
+        towerEvent = {
+          icon: xCircleIcon,
+          text: `Volltreffer in Reihe ${hitRow + 1} — ${lost} Deckel weg. Richtig wäre: ${correctAnswerText(currentQuestion)}`
+        };
+        phase = 'stacking';
+        render();
+      }, CANNON_IMPACT_MS);
+    }, CANNON_FLIGHT_MS);
+  }
+
+  function rollWind() {
+    return !windJustHappened && height >= WIND_MIN_HEIGHT && Math.random() < WIND_CHANCE;
+  }
+
+  async function startWind() {
+    windJustHappened = true;
+    phase = 'loading';
+    render();
+    const q = await getNextQuestion(height);
+    if (!q) {
+      phase = 'loading';
+      render();
+      loadNextQuestion();
+      return;
+    }
+    windQuestion = q;
+    windSelected = null;
+    phase = 'wind';
+    // Countdown first, so the very first paint already shows the full bar.
+    startCountdown(WIND_SECONDS, () => submitWindAnswer(-1));
+    render();
+  }
+
+  function submitWindAnswer(index) {
+    if (phase !== 'wind') return;
+    clearTimer();
+    windSelected = index;
+    heightBeforeAnswer = Math.max(height, 0);
+    lastDelta = null;
+    if (index === windQuestion.correctIndex) {
+      towerEvent = { icon: checkCircleIcon, text: 'Böe überstanden — der Turm hält!' };
+    } else {
+      const newHeight = heightBelowRow(topRowIndex(Math.max(height, 0)));
+      const lost = Math.max(height, 0) - newHeight;
+      height = newHeight;
+      toneService.playCollapse();
+      towerEvent = {
+        icon: xCircleIcon,
+        text: `Die Böe fegt die oberste Reihe weg — ${lost} Deckel weg. Richtig wäre: ${correctAnswerText(windQuestion)}`
+      };
+    }
+    phase = 'stacking';
+    render();
+  }
+
   function proceedAfterReveal() {
     clearStackingTimer();
+    towerEvent = null;
     wagerMode = 'normal';
     if (height >= MAX_HEIGHT) {
       endReason = 'maxHeight';
@@ -207,6 +412,10 @@ export function mount(container) {
       phase = 'collapsing';
       render();
       setTimeout(() => endSession(), 700);
+      return;
+    }
+    if (rollWind()) {
+      startWind();
       return;
     }
     phase = 'loading';
@@ -263,6 +472,7 @@ export function mount(container) {
   function backToSelect() {
     clearTimer();
     clearStackingTimer();
+    clearCannonTimer();
     phase = 'select';
     render();
   }
@@ -359,6 +569,7 @@ export function mount(container) {
       <div class="quiz-mode challenge-mode pad center-text">
         <h2>🍺 Bierdeckel-Challenge</h2>
         <p class="hint">Jede richtige Antwort legt einen Deckel auf den Turm. Fehler lassen ihn wackeln — jede fertige Reihe (Höhe ${CHECKPOINTS.join('/')}) sichert deinen Stand, darunter stürzt alles ein. Ganz oben wartet die fertige Pyramide mit ${MAX_HEIGHT} Deckeln!</p>
+        <p class="hint">Ab Höhe ${CANNON_MIN_HEIGHT} kommen Kanonen-Fragen: Lösung eintippen statt auswählen — daneben, und die Kanone schießt eine zufällige Reihe weg. Ab Höhe ${WIND_MIN_HEIGHT} können Böen an der obersten Reihe zerren.</p>
         <p class="hint">Aktueller Bestwert: <strong>${bestHeight}</strong></p>
         <button class="btn btn-huge mode-choice-btn btn-primary btn-with-icon" id="start-btn">
           <span class="icon-inline-wrap icon-lg">${playIcon}</span>
@@ -387,6 +598,10 @@ export function mount(container) {
   }
 
   function wagerControlsHtml() {
+    // Wagers don't mix with a cannon round — the cannon already sets the stakes.
+    if (cannonQuestion) {
+      return jokerUsed ? '' : `<div class="wager-controls"><button class="btn btn-secondary wager-btn" id="joker-btn">Joker (Frage überspringen)</button></div>`;
+    }
     const doubleAvailable = height >= WAGER_UNLOCK_HEIGHT;
     const goldenAvailable = height >= GOLDEN_UNLOCK_HEIGHT && !goldenUsed;
     if (!doubleAvailable && !goldenAvailable && jokerUsed) return '';
@@ -398,10 +613,22 @@ export function mount(container) {
       </div>`;
   }
 
+  function cannonInputHtml(answered) {
+    if (answered) {
+      const correct = lastCorrect;
+      return `
+        <div class="cannon-answer ${correct ? 'correct' : 'incorrect'}">${escapeHtml(typedAnswer) || '—'}</div>`;
+    }
+    return `
+      <form id="cannon-form" class="typing-form">
+        <input type="text" id="cannon-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" placeholder="Lösung eintippen" />
+        <button type="submit" class="btn btn-huge btn-compact btn-primary btn-with-icon"><span class="icon-inline-wrap">${checkCircleIcon}</span> Abgeben</button>
+      </form>`;
+  }
+
   function timerHtml() {
     if (timerRemaining == null) return '';
-    const total = height >= TIMER_HARD_HEIGHT ? TIMER_SECONDS_HARD : TIMER_SECONDS_MEDIUM;
-    const pct = Math.round((timerRemaining / total) * 100);
+    const pct = Math.round((timerRemaining / timerTotal) * 100);
     return `
       <div class="challenge-timer">
         <div class="progress-wrap"><div class="progress-bar ${timerRemaining <= 3 ? 'timer-urgent' : ''}" style="width:${pct}%"></div></div>
@@ -422,9 +649,11 @@ export function mount(container) {
         <div class="quiz-content">
           <p class="hint center-text challenge-height-line">Turmhöhe ${Math.max(heightAtQuestion(answered), 0)}${lastCheckpoint > 0 ? ` · gesichert bei ${lastCheckpoint}` : ''}</p>
           ${timerHtml()}
+          ${cannonQuestion ? `<p class="cannon-warning center-text">💥 Kanonen-Frage — tippe die Lösung. Richtig: +${CANNON_REWARD}. Falsch: die Kanone feuert.</p>` : ''}
           <p class="hint center-text">${escapeHtml(q.promptLabel)}</p>
           <div class="quiz-word">${escapeHtml(q.prompt)}</div>
-          ${wagerMode !== 'normal' ? `<p class="hint center-text wager-active-hint">${wagerMode === 'golden' ? '🏆 Goldener Deckel aktiv' : '⚡ Doppelt-Einsatz aktiv'}</p>` : ''}
+          ${wagerMode !== 'normal' && !cannonQuestion ? `<p class="hint center-text wager-active-hint">${wagerMode === 'golden' ? '🏆 Goldener Deckel aktiv' : '⚡ Doppelt-Einsatz aktiv'}</p>` : ''}
+          ${cannonQuestion ? cannonInputHtml(answered) : `
           <div class="quiz-options">
             ${q.options.map((opt, i) => {
               if (!answered) return `<button class="btn btn-option" data-opt="${i}">${escapeHtml(opt)}</button>`;
@@ -433,13 +662,24 @@ export function mount(container) {
               else if (i === selectedIndex) cls += ' incorrect';
               return `<button class="${cls}" disabled>${escapeHtml(opt)}</button>`;
             }).join('')}
-          </div>
+          </div>`}
           ${wagerControlsHtml()}
         </div>
         <button class="btn btn-secondary btn-with-icon" id="cashout-btn" ${answered ? 'disabled' : ''}><span class="icon-inline-wrap">${checkCircleIcon}</span> Aufhören &amp; Sichern (Höhe ${Math.max(heightAtQuestion(answered), 0)})</button>
       </div>`;
 
     if (answered) return;
+    if (cannonQuestion) {
+      const input = container.querySelector('#cannon-input');
+      // preventScroll: this layout positions itself; iOS's own scroll-into-view fights it.
+      input.focus({ preventScroll: true });
+      container.querySelector('#cannon-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        // An accidental empty submit shouldn't be what fires the cannon.
+        if (!input.value.trim()) return;
+        submitTypedAnswer(input.value);
+      });
+    }
     container.querySelectorAll('.btn-option').forEach((btn, i) => {
       btn.addEventListener('click', () => submitAnswer(i));
     });
@@ -459,14 +699,51 @@ export function mount(container) {
     const q = currentQuestion;
     const correctAnswer = q.options[q.correctIndex];
     const towerOpts = lastDelta > 0 ? { newAbove: heightBeforeAnswer } : {};
+    const note = towerEvent || {
+      icon: lastCorrect ? checkCircleIcon : xCircleIcon,
+      text: `${lastCorrect ? 'Richtig!' : `Richtig wäre: ${correctAnswer}`} (${lastDelta > 0 ? '+' : ''}${lastDelta})`
+    };
     container.innerHTML = `
       <div class="quiz-mode challenge-mode pad center tower-stage">
         ${towerHtml(Math.max(height, 0), towerOpts)}
-        <p class="hint btn-with-icon center-text"><span class="icon-inline-wrap">${lastCorrect ? checkCircleIcon : xCircleIcon}</span> ${lastCorrect ? 'Richtig!' : `Richtig wäre: ${escapeHtml(correctAnswer)}`} (${lastDelta > 0 ? '+' : ''}${lastDelta})</p>
-        ${q.explanation ? `<p class="grammar-explanation">${escapeHtml(q.explanation)}</p>` : ''}
+        <p class="hint btn-with-icon center-text"><span class="icon-inline-wrap">${note.icon}</span> ${escapeHtml(note.text)}</p>
+        ${!towerEvent && q.explanation ? `<p class="grammar-explanation">${escapeHtml(q.explanation)}</p>` : ''}
         <button class="btn btn-huge btn-compact btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap">${playIcon}</span></button>
       </div>`;
     container.querySelector('#next-btn').addEventListener('click', proceedAfterReveal);
+  }
+
+  /** The cannonball flying in, then the rows it took with it. */
+  function renderCannon() {
+    const hit = cannonStage === 'impact';
+    container.innerHTML = `
+      <div class="quiz-mode challenge-mode pad center tower-stage cannon-stage">
+        <div class="cannon-field">
+          ${towerHtml(Math.max(height, 0), hit ? { collapseAbove: cannonTargetHeight } : {})}
+          <div class="cannonball${hit ? ' cannonball-hit' : ''}"></div>
+        </div>
+        <p class="cannon-warning center-text">${hit ? '💥 Volltreffer!' : '💥 Die Kanone feuert …'}</p>
+      </div>`;
+  }
+
+  /** A gust mid-run: one quick question stands between the top row and the floor. */
+  function renderWind() {
+    const q = windQuestion;
+    container.innerHTML = `
+      <div class="quiz-mode challenge-mode">
+        <div class="quiz-content">
+          <p class="cannon-warning center-text">💨 Eine Böe erfasst den Turm! Schnell richtig antworten, sonst fällt die oberste Reihe.</p>
+          ${timerHtml()}
+          <p class="hint center-text">${escapeHtml(q.promptLabel)}</p>
+          <div class="quiz-word">${escapeHtml(q.prompt)}</div>
+          <div class="quiz-options">
+            ${q.options.map((opt, i) => `<button class="btn btn-option" data-opt="${i}">${escapeHtml(opt)}</button>`).join('')}
+          </div>
+        </div>
+      </div>`;
+    container.querySelectorAll('.btn-option').forEach((btn, i) => {
+      btn.addEventListener('click', () => submitWindAnswer(i));
+    });
   }
 
   function renderCollapsing() {
@@ -549,6 +826,8 @@ export function mount(container) {
     if (phase === 'active') return renderQuestion(false);
     if (phase === 'revealed') return renderQuestion(true);
     if (phase === 'stacking') return renderStacking();
+    if (phase === 'cannon') return renderCannon();
+    if (phase === 'wind') return renderWind();
     if (phase === 'collapsing') return renderCollapsing();
     if (phase === 'boss') return renderBoss();
     if (phase === 'results') return renderResults();
@@ -564,5 +843,6 @@ export function mount(container) {
   return () => {
     clearTimer();
     clearStackingTimer();
+    clearCannonTimer();
   };
 }

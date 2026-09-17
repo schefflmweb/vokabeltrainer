@@ -13,6 +13,8 @@ const GOLDEN_UNLOCK_HEIGHT = 12;
 const TIMER_START_HEIGHT = 10;
 const TIMER_HARD_HEIGHT = 15;
 const TIMER_SECONDS_MEDIUM = 15;
+// How long the answer stays coloured on the question screen before the tower page takes over.
+const REVEAL_FLASH_MS = 200;
 const TIMER_SECONDS_HARD = 10;
 
 function computeDelta(correct, height, wagerMode) {
@@ -38,7 +40,7 @@ function escapeHtml(str) {
 }
 
 export function mount(container) {
-  let phase = 'select'; // 'select' | 'loading' | 'active' | 'revealed' | 'boss' | 'results' | 'empty'
+  let phase = 'select'; // 'select' | 'loading' | 'active' | 'revealed' | 'stacking' | 'collapsing' | 'boss' | 'results' | 'empty'
   let bestHeight = 0;
   let height = 0;
   let lastCheckpoint = 0;
@@ -58,6 +60,16 @@ export function mount(container) {
   let bossCorrect = null;
   let timerHandle = null;
   let timerRemaining = null;
+  // Height before the current answer, so the tower page can animate whatever it just gained.
+  let heightBeforeAnswer = 0;
+  let stackingHandle = null;
+
+  function clearStackingTimer() {
+    if (stackingHandle) {
+      clearTimeout(stackingHandle);
+      stackingHandle = null;
+    }
+  }
 
   function clearTimer() {
     if (timerHandle) {
@@ -117,6 +129,7 @@ export function mount(container) {
     selectedIndex = index;
     const correct = index === currentQuestion.correctIndex;
     lastCorrect = correct;
+    heightBeforeAnswer = Math.max(height, 0);
     lastDelta = computeDelta(correct, height, wagerMode);
     height += lastDelta;
     lastCheckpoint = updateCheckpoint(lastCheckpoint, height);
@@ -128,8 +141,17 @@ export function mount(container) {
       sessionStats.wrongQuestions.push(currentQuestion);
       toneService.playIncorrect();
     }
+    // Show the answer colours just long enough to register, then hand the
+    // whole screen over to the tower — it needs the room to grow.
     phase = 'revealed';
     render();
+    clearStackingTimer();
+    stackingHandle = setTimeout(() => {
+      stackingHandle = null;
+      if (phase !== 'revealed') return;
+      phase = 'stacking';
+      render();
+    }, REVEAL_FLASH_MS);
   }
 
   function useJoker() {
@@ -163,6 +185,7 @@ export function mount(container) {
   }
 
   function proceedAfterReveal() {
+    clearStackingTimer();
     wagerMode = 'normal';
     if (height >= MAX_HEIGHT) {
       endReason = 'maxHeight';
@@ -232,6 +255,7 @@ export function mount(container) {
 
   function backToSelect() {
     clearTimer();
+    clearStackingTimer();
     phase = 'select';
     render();
   }
@@ -276,8 +300,13 @@ export function mount(container) {
   function triangleEl(levelIndex, opts = {}) {
     const isCheckpoint = CHECKPOINTS.includes(levelIndex);
     const falling = opts.collapseAbove != null && levelIndex > opts.collapseAbove;
-    const cls = ['coaster-triangle', isCheckpoint && 'coaster-triangle-checkpoint', falling && 'coaster-triangle-falling']
-      .filter(Boolean).join(' ');
+    const justPlaced = opts.newAbove != null && levelIndex > opts.newAbove;
+    const cls = [
+      'coaster-triangle',
+      isCheckpoint && 'coaster-triangle-checkpoint',
+      falling && 'coaster-triangle-falling',
+      justPlaced && 'coaster-triangle-new'
+    ].filter(Boolean).join(' ');
     return `<div class="${cls}">
       <div class="coaster-leg left"></div>
       <div class="coaster-leg right"></div>
@@ -371,24 +400,37 @@ export function mount(container) {
       </div>`;
   }
 
-  function renderActive() {
+  /**
+   * The question screen. The tower is deliberately absent here — it gets the
+   * whole screen to itself once the answer is in (see renderStacking), so it
+   * has room to grow. `answered` only recolours the options, keeping the
+   * layout identical so nothing shifts during that brief moment.
+   */
+  function renderQuestion(answered) {
     const q = currentQuestion;
     container.innerHTML = `
       <div class="quiz-mode challenge-mode">
-        ${towerHtml(Math.max(height, 0))}
         <div class="quiz-content">
+          <p class="hint center-text challenge-height-line">Turmhöhe ${Math.max(heightAtQuestion(answered), 0)}${lastCheckpoint > 0 ? ` · gesichert bei ${lastCheckpoint}` : ''}</p>
           ${timerHtml()}
           <p class="hint center-text">${escapeHtml(q.promptLabel)}</p>
           <div class="quiz-word">${escapeHtml(q.prompt)}</div>
           ${wagerMode !== 'normal' ? `<p class="hint center-text wager-active-hint">${wagerMode === 'golden' ? '🏆 Goldener Deckel aktiv' : '⚡ Doppelt-Einsatz aktiv'}</p>` : ''}
           <div class="quiz-options">
-            ${q.options.map((opt, i) => `<button class="btn btn-option" data-opt="${i}">${escapeHtml(opt)}</button>`).join('')}
+            ${q.options.map((opt, i) => {
+              if (!answered) return `<button class="btn btn-option" data-opt="${i}">${escapeHtml(opt)}</button>`;
+              let cls = 'btn btn-option disabled';
+              if (i === q.correctIndex) cls += ' correct';
+              else if (i === selectedIndex) cls += ' incorrect';
+              return `<button class="${cls}" disabled>${escapeHtml(opt)}</button>`;
+            }).join('')}
           </div>
           ${wagerControlsHtml()}
         </div>
-        <button class="btn btn-secondary btn-with-icon" id="cashout-btn"><span class="icon-inline-wrap">${checkCircleIcon}</span> Aufhören &amp; Sichern (Höhe ${Math.max(height, 0)})</button>
+        <button class="btn btn-secondary btn-with-icon" id="cashout-btn" ${answered ? 'disabled' : ''}><span class="icon-inline-wrap">${checkCircleIcon}</span> Aufhören &amp; Sichern (Höhe ${Math.max(heightAtQuestion(answered), 0)})</button>
       </div>`;
 
+    if (answered) return;
     container.querySelectorAll('.btn-option').forEach((btn, i) => {
       btn.addEventListener('click', () => submitAnswer(i));
     });
@@ -398,26 +440,21 @@ export function mount(container) {
     container.querySelector('#cashout-btn').addEventListener('click', cashOut);
   }
 
-  function renderRevealed() {
+  /** The height already counts the answer that was just given; the question screen should keep showing the height it was asked at. */
+  function heightAtQuestion(answered) {
+    return answered ? heightBeforeAnswer : height;
+  }
+
+  /** The tower gets the screen to itself here, so it can grow without the question crowding it. */
+  function renderStacking() {
     const q = currentQuestion;
     const correctAnswer = q.options[q.correctIndex];
+    const towerOpts = lastDelta > 0 ? { newAbove: heightBeforeAnswer } : {};
     container.innerHTML = `
-      <div class="quiz-mode challenge-mode">
-        ${towerHtml(Math.max(height, 0))}
-        <div class="quiz-content">
-          <div class="quiz-word">${escapeHtml(q.prompt)}</div>
-          <div class="quiz-options">
-            ${q.options.map((opt, i) => {
-              let cls = 'btn btn-option disabled';
-              if (i === q.correctIndex) cls += ' correct';
-              else if (i === selectedIndex) cls += ' incorrect';
-              return `<button class="${cls}" disabled>${escapeHtml(opt)}</button>`;
-            }).join('')}
-          </div>
-          <p class="hint btn-with-icon"><span class="icon-inline-wrap">${lastCorrect ? checkCircleIcon : xCircleIcon}</span> ${lastCorrect ? 'Richtig!' : `Richtig wäre: ${escapeHtml(correctAnswer)}`} (${lastDelta > 0 ? '+' : ''}${lastDelta})</p>
-          ${q.example ? `<p class="example-sentence">${escapeHtml(q.example)}</p>` : ''}
-          ${q.explanation ? `<p class="grammar-explanation">${escapeHtml(q.explanation)}</p>` : ''}
-        </div>
+      <div class="quiz-mode challenge-mode pad center tower-stage">
+        ${towerHtml(Math.max(height, 0), towerOpts)}
+        <p class="hint btn-with-icon center-text"><span class="icon-inline-wrap">${lastCorrect ? checkCircleIcon : xCircleIcon}</span> ${lastCorrect ? 'Richtig!' : `Richtig wäre: ${escapeHtml(correctAnswer)}`} (${lastDelta > 0 ? '+' : ''}${lastDelta})</p>
+        ${q.explanation ? `<p class="grammar-explanation">${escapeHtml(q.explanation)}</p>` : ''}
         <button class="btn btn-huge btn-compact btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap">${playIcon}</span></button>
       </div>`;
     container.querySelector('#next-btn').addEventListener('click', proceedAfterReveal);
@@ -500,8 +537,9 @@ export function mount(container) {
     if (phase === 'select') return renderSelect();
     if (phase === 'empty') return renderEmpty();
     if (phase === 'loading') return renderLoading();
-    if (phase === 'active') return renderActive();
-    if (phase === 'revealed') return renderRevealed();
+    if (phase === 'active') return renderQuestion(false);
+    if (phase === 'revealed') return renderQuestion(true);
+    if (phase === 'stacking') return renderStacking();
     if (phase === 'collapsing') return renderCollapsing();
     if (phase === 'boss') return renderBoss();
     if (phase === 'results') return renderResults();
@@ -516,5 +554,6 @@ export function mount(container) {
 
   return () => {
     clearTimer();
+    clearStackingTimer();
   };
 }

@@ -973,6 +973,18 @@ textarea:focus {
 
 /* --- Bierdeckel-Challenge --- */
 
+/* The tower page reserves room for a full-height tower and keeps the ground
+   pinned to the bottom of it, so the tower grows upward into that space
+   instead of the whole block re-centring on every new coaster. */
+.tower-stage .tower-wrap {
+  justify-content: flex-end;
+  min-height: 320px;
+}
+
+.challenge-height-line {
+  margin: 0;
+}
+
 .tower-wrap {
   position: relative;
   display: flex;
@@ -1018,6 +1030,15 @@ textarea:focus {
 
 .coaster-triangle-falling::after {
   opacity: 0;
+}
+
+@keyframes coasterPlace {
+  from { opacity: 0; transform: translateY(-16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.coaster-triangle-new {
+  animation: coasterPlace 0.35s ease-out;
 }
 
 /* Both legs pivot around their own bottom centre, placed so that each one's

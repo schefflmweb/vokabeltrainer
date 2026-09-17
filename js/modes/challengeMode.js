@@ -14,7 +14,7 @@ import {
 // screen fits.
 const TIER_CAPACITIES = [7, 6, 5, 4, 3, 2, 1];
 
-/** Every band of coasters, bottom to top. One coaster per round, so a band of n takes n rounds. */
+/** Every band of coasters, bottom to top — the rows the tower is laid out in. */
 const BANDS = [];
 TIER_CAPACITIES.forEach((cap, i) => {
   BANDS.push({ kind: 'triangles', count: cap });
@@ -22,16 +22,53 @@ TIER_CAPACITIES.forEach((cap, i) => {
   if (i < TIER_CAPACITIES.length - 1) BANDS.push({ kind: 'plates', count: cap - 1 });
 });
 
-/** The height at which each band is finished. */
-const BAND_ENDS = [];
-BANDS.forEach((band, i) => BAND_ENDS.push((BAND_ENDS[i - 1] || 0) + band.count));
+const triangleBand = (level) => level * 2;
+const plateBand = (level) => level * 2 + 1;
 
-const MAX_HEIGHT = BAND_ENDS[BAND_ENDS.length - 1];
-// A finished row of triangles is what makes a real tower stable, so that's
-// where the safe points sit (the very top doesn't need one).
-const CHECKPOINTS = BANDS
-  .map((band, i) => (band.kind === 'triangles' ? BAND_ENDS[i] : 0))
-  .filter((end) => end > 0 && end < MAX_HEIGHT);
+/**
+ * The order the coasters go up in — not row by row, but the way you'd really
+ * build it: two coasters leaned into a triangle, a flat one across their top,
+ * another triangle resting on that, and then the next unit started to the
+ * right of it. Each later unit in a row shares its neighbour's triangle, so it
+ * only needs one more. Higher up the triangles below already stand, so a unit
+ * is just the flat coaster and the triangle on it.
+ */
+const UNITS = [];
+/** Which level (row of triangles) each unit belongs to. */
+const UNIT_LEVELS = [];
+for (let k = 0; k < TIER_CAPACITIES[0] - 1; k++) {
+  const slots = k === 0
+    ? [{ band: 0, index: 0 }, { band: 0, index: 1 }]
+    : [{ band: 0, index: k + 1 }];
+  slots.push({ band: plateBand(0), index: k }, { band: triangleBand(1), index: k });
+  UNITS.push(slots);
+  UNIT_LEVELS.push(0);
+}
+for (let level = 1; level < TIER_CAPACITIES.length - 1; level++) {
+  for (let k = 0; k < TIER_CAPACITIES[level] - 1; k++) {
+    UNITS.push([{ band: plateBand(level), index: k }, { band: triangleBand(level + 1), index: k }]);
+    UNIT_LEVELS.push(level);
+  }
+}
+
+/** Which round each coaster of the tower is placed in, keyed "band:index". */
+const STEP_OF_SLOT = new Map();
+/** The height at which each unit is finished. */
+const UNIT_ENDS = [];
+UNITS.forEach((slots, unitIndex) => {
+  let step = UNIT_ENDS[unitIndex - 1] || 0;
+  slots.forEach((slot) => {
+    step += 1;
+    STEP_OF_SLOT.set(`${slot.band}:${slot.index}`, step);
+  });
+  UNIT_ENDS.push(step);
+});
+
+const MAX_HEIGHT = UNIT_ENDS[UNIT_ENDS.length - 1];
+/** The height at which each level is finished — the tower's genuinely stable states. */
+const LEVEL_ENDS = UNIT_ENDS.filter((end, i) => UNIT_LEVELS[i] !== UNIT_LEVELS[i + 1]);
+// Safe points: early on every second unit, higher up each finished level.
+const CHECKPOINTS = [UNIT_ENDS[1], UNIT_ENDS[3], ...LEVEL_ENDS].filter((end) => end < MAX_HEIGHT);
 const WAGER_UNLOCK_HEIGHT = 19;
 const GOLDEN_UNLOCK_HEIGHT = 30;
 const TIMER_START_HEIGHT = 24;
@@ -39,22 +76,17 @@ const TIMER_HARD_HEIGHT = 37;
 // From here on a plain wrong answer costs three coasters instead of two.
 const HARSH_PENALTY_HEIGHT = 37;
 
-/** The band the topmost coaster sits in. */
-function bandIndexOf(h) {
-  for (let i = 0; i < BAND_ENDS.length; i++) {
-    if (h <= BAND_ENDS[i]) return i;
+/** The unit that height `h` falls in — the one currently being built. */
+function unitIndexOf(h) {
+  for (let i = 0; i < UNIT_ENDS.length; i++) {
+    if (h <= UNIT_ENDS[i]) return i;
   }
-  return BAND_ENDS.length - 1;
+  return UNIT_ENDS.length - 1;
 }
 
-/** What's left standing when everything from `bandIndex` upward comes off. */
-function heightBelowBand(bandIndex) {
-  return bandIndex === 0 ? 0 : BAND_ENDS[bandIndex - 1];
-}
-
-/** Which row of the pyramid a band belongs to, for telling the player where they were hit. */
-function bandRowNumber(bandIndex) {
-  return Math.floor(bandIndex / 2) + 1;
+/** What's left standing when the given unit, and everything built after it, comes down. */
+function heightBelowUnit(unitIndex) {
+  return unitIndex === 0 ? 0 : UNIT_ENDS[unitIndex - 1];
 }
 const TIMER_SECONDS_MEDIUM = 15;
 // How long the answer stays coloured on the question screen before the tower page takes over.
@@ -62,7 +94,7 @@ const REVEAL_FLASH_MS = 200;
 const TIMER_SECONDS_HARD = 10;
 
 // Cannon rounds: no options, type the word yourself. Get it wrong and a
-// cannonball takes out a random row — and everything resting on it.
+// cannonball takes out a random unit — and everything resting on it.
 const CANNON_MIN_HEIGHT = 10;
 const CANNON_CHANCE = 0.3;
 const CANNON_REWARD = 2;
@@ -210,6 +242,7 @@ export function mount(container) {
     typedAnswer = '';
     towerEvent = null;
     windJustHappened = false;
+    lastZoom = null; // a new tower starts with the camera close in again
     sessionStats = { questionsAsked: 0, questionsCorrect: 0, wrongQuestions: [] };
     sessionStartedAt = Date.now();
     endReason = null;
@@ -331,14 +364,15 @@ export function mount(container) {
   }
 
   /**
-   * A missed cannon round. The ball picks a band at random — checkpoints don't
-   * shield it — and everything from there up comes down with it.
+   * A missed cannon round. The ball picks one of the tower's units at random —
+   * checkpoints don't shield it — and that unit, plus everything built on and
+   * after it, comes down.
    */
   function fireCannon() {
-    const standingBands = bandIndexOf(Math.max(height, 0)) + 1;
-    const hitBand = Math.floor(Math.random() * standingBands);
-    const hitRow = bandRowNumber(hitBand);
-    cannonTargetHeight = heightBelowBand(hitBand);
+    const standingUnits = unitIndexOf(Math.max(height, 0)) + 1;
+    const hitUnit = Math.floor(Math.random() * standingUnits);
+    const hitLevel = UNIT_LEVELS[hitUnit] + 1;
+    cannonTargetHeight = heightBelowUnit(hitUnit);
     cannonStage = 'incoming';
     phase = 'cannon';
     render();
@@ -354,7 +388,7 @@ export function mount(container) {
         height = cannonTargetHeight;
         towerEvent = {
           icon: xCircleIcon,
-          text: `Volltreffer in Reihe ${hitRow} — ${lost} Deckel weg. Richtig wäre: ${correctAnswerText(currentQuestion)}`
+          text: `Volltreffer in Ebene ${hitLevel} — ${lost} Deckel weg. Richtig wäre: ${correctAnswerText(currentQuestion)}`
         };
         phase = 'stacking';
         render();
@@ -394,13 +428,13 @@ export function mount(container) {
     if (index === windQuestion.correctIndex) {
       towerEvent = { icon: checkCircleIcon, text: 'Böe überstanden — der Turm hält!' };
     } else {
-      const newHeight = heightBelowBand(bandIndexOf(Math.max(height, 0)));
+      const newHeight = heightBelowUnit(unitIndexOf(Math.max(height, 0)));
       const lost = Math.max(height, 0) - newHeight;
       height = newHeight;
       toneService.playCollapse();
       towerEvent = {
         icon: xCircleIcon,
-        text: `Die Böe räumt die oberste Lage ab — ${lost} Deckel weg. Richtig wäre: ${correctAnswerText(windQuestion)}`
+        text: `Die Böe weht den obersten Abschnitt weg — ${lost} Deckel weg. Richtig wäre: ${correctAnswerText(windQuestion)}`
       };
     }
     phase = 'stacking';
@@ -491,23 +525,13 @@ export function mount(container) {
 
   // --- Rendering ---
 
-  // A real coaster tower is built from A-frame triangles (two coasters leaned
-  // against each other), several triangles side by side per row, and one flat
-  // coaster across each adjacent pair for the next row to rest on — see BANDS
-  // for the build order.
-  const TRIANGLE_H = 40;
-  const TIER_GAP = 4;
-  const BRIDGE_H = 5;
-
-  function bestLineOffset(targetHeight) {
-    let step = 0;
-    let offsetPx = 0;
-    for (const band of BANDS) {
-      if (targetHeight <= step + band.count) return offsetPx;
-      offsetPx += (band.kind === 'triangles' ? TRIANGLE_H : BRIDGE_H) + TIER_GAP;
-      step += band.count;
+  /** The round the first coaster of this band goes up in — the band exists from then on. */
+  function bandFirstStep(bandIndex) {
+    let earliest = Infinity;
+    for (let i = 0; i < BANDS[bandIndex].count; i++) {
+      earliest = Math.min(earliest, STEP_OF_SLOT.get(`${bandIndex}:${i}`));
     }
-    return offsetPx;
+    return earliest;
   }
 
   function triangleEl(levelIndex, opts = {}) {
@@ -534,20 +558,21 @@ export function mount(container) {
 
   /**
    * Every band is laid out at its finished width, with the coasters that
-   * aren't placed yet left as invisible slots. That keeps a half-built band
-   * left-aligned, so each flat coaster lands on the two triangles it bridges
-   * and the row above sits exactly on those.
+   * aren't placed yet left as invisible slots. That keeps each flat coaster on
+   * the two triangles it bridges and the row above exactly on those, whichever
+   * order they went up in.
    */
-  function bandHtml(band, placed, firstStep, opts) {
+  function bandHtml(bandIndex, opts) {
+    const band = BANDS[bandIndex];
     let items = '';
-    for (let k = 0; k < band.count; k++) {
-      if (k >= placed) {
+    for (let i = 0; i < band.count; i++) {
+      const step = STEP_OF_SLOT.get(`${bandIndex}:${i}`);
+      if (step > opts.displayHeight) {
         items += band.kind === 'triangles'
           ? '<div class="coaster-triangle coaster-slot"></div>'
           : '<div class="tier-plate coaster-slot"></div>';
         continue;
       }
-      const step = firstStep + k;
       items += band.kind === 'triangles' ? triangleEl(step, opts) : plateEl(step, opts);
     }
     return `<div class="${band.kind === 'triangles' ? 'coaster-tier' : 'tier-plates'}">${items}</div>`;
@@ -593,35 +618,101 @@ export function mount(container) {
 
   function towerHtml(displayHeight, opts = {}) {
     const wobbleClass = displayHeight >= 30 ? 'wobble-strong' : displayHeight >= 20 ? 'wobble-medium' : displayHeight >= 10 ? 'wobble-light' : '';
+    const towerOpts = { ...opts, displayHeight };
     let rows = '';
-    let step = 0;
-    for (const band of BANDS) {
-      const placed = Math.max(0, Math.min(band.count, displayHeight - step));
-      if (placed <= 0) break;
-      rows += bandHtml(band, placed, step + 1, opts);
-      step += band.count;
-    }
-    // Only worth drawing while it's still a target ahead — once passed, the
-    // line would just cut across the tower it's meant to celebrate.
-    const bestMarker = bestHeight > displayHeight && bestHeight <= MAX_HEIGHT
-      ? `<div class="tower-best-line" style="bottom:${bestLineOffset(bestHeight)}px"><span>Bestwert ${bestHeight}</span></div>`
-      : '';
+    BANDS.forEach((band, b) => {
+      if (bandFirstStep(b) > displayHeight) return; // nothing of this band stands yet
+      rows += bandHtml(b, towerOpts);
+    });
     return `
       <div class="tower-wrap">
         ${inkDefsSvg()}
-        ${bestMarker}
-        <div class="tower ${wobbleClass}">${rows}</div>
-        <div class="tower-ground"></div>
+        <div class="tower-zoom">
+          <div class="tower ${wobbleClass}">${rows}</div>
+          <div class="tower-ground"></div>
+        </div>
       </div>
-      <p class="hint center-text tower-height-label">Höhe ${displayHeight}</p>`;
+      <p class="hint center-text tower-height-label">Höhe ${displayHeight}${bestHeight > 0 ? ` · Bestwert ${bestHeight}` : ''}</p>`;
+  }
+
+  // How much of the frame the tower should fill, and how far it may be
+  // magnified when only a few coasters are standing.
+  const ZOOM_FILL = 0.94;
+  const ZOOM_MAX = 2.6;
+  let lastZoom = null;
+
+  /**
+   * Frames whatever is standing: the camera sits close on the first few
+   * coasters and pulls back as the tower grows, so the drawing always fills
+   * the page. Measured rather than calculated, since unplaced coasters still
+   * hold their slots in the layout.
+   */
+  function fitTowerZoom() {
+    const zoom = container.querySelector('.tower-zoom');
+    const stage = container.querySelector('.tower-wrap');
+    if (!zoom || !stage) return;
+    const drawn = zoom.querySelectorAll('.coaster-triangle:not(.coaster-slot), svg.tier-plate');
+    if (!drawn.length) return;
+
+    zoom.style.transition = 'none';
+    zoom.style.transform = 'none';
+    zoom.style.transformOrigin = '50% 50%';
+    const zoomBox = zoom.getBoundingClientRect();
+    const stageBox = stage.getBoundingClientRect();
+    let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+    drawn.forEach((el) => {
+      const r = el.getBoundingClientRect();
+      left = Math.min(left, r.left);
+      right = Math.max(right, r.right);
+      top = Math.min(top, r.top);
+      bottom = Math.max(bottom, r.bottom);
+    });
+
+    // The table line is placed under whatever actually stands, rather than
+    // under the (always full-width) rows — otherwise it drifts out of frame
+    // while the camera is still close in on the first few coasters.
+    const ground = zoom.querySelector('.tower-ground');
+    if (ground) {
+      ground.style.left = `${left - zoomBox.left - 9}px`;
+      ground.style.top = `${bottom - zoomBox.top + 1}px`;
+      ground.style.width = `${right - left + 18}px`;
+    }
+
+    const scale = Math.min(
+      ZOOM_MAX,
+      (stageBox.width * ZOOM_FILL) / (right - left),
+      (stageBox.height * ZOOM_FILL) / (bottom - top)
+    );
+    const next = {
+      // The origin sits on the drawing's centre, so scaling holds it in place
+      // and the translate only has to move it to the middle of the frame.
+      originX: (left + right) / 2 - zoomBox.left,
+      originY: (top + bottom) / 2 - zoomBox.top,
+      dx: (stageBox.left + stageBox.width / 2) - (left + right) / 2,
+      dy: (stageBox.top + stageBox.height / 2) - (top + bottom) / 2,
+      scale
+    };
+    const apply = (z) => {
+      zoom.style.transformOrigin = `${next.originX}px ${next.originY}px`;
+      zoom.style.transform = `translate(${z.dx}px, ${z.dy}px) scale(${z.scale})`;
+    };
+
+    // Start from the previous framing so the camera glides to the new one
+    // instead of jumping — every round re-renders the tower from scratch.
+    apply(lastZoom || next);
+    lastZoom = next;
+    requestAnimationFrame(() => {
+      zoom.style.transition = 'transform 0.45s ease';
+      apply(next);
+    });
   }
 
   function renderSelect() {
     container.innerHTML = `
       <div class="quiz-mode challenge-mode pad center-text">
         <h2>🍺 Bierdeckel-Challenge</h2>
-        <p class="hint">Jede richtige Antwort legt genau einen Deckel: erst eine Reihe Dreiecke, dann je einen flachen Deckel über zwei Dreiecke, darauf die nächste Reihe. Fehler lassen den Turm wackeln — jede fertige Dreiecksreihe sichert deinen Stand, darunter stürzt alles ein. Ganz oben wartet die fertige Pyramide aus ${MAX_HEIGHT} Deckeln!</p>
-        <p class="hint">Ab Höhe ${CANNON_MIN_HEIGHT} kommen Kanonen-Fragen: Lösung eintippen statt auswählen — daneben, und die Kanone schießt eine zufällige Reihe weg. Ab Höhe ${WIND_MIN_HEIGHT} können Böen an der obersten Reihe zerren.</p>
+        <p class="hint">Jede richtige Antwort legt genau einen Deckel — gebaut wird wie in echt: zwei Deckel als Dreieck, ein flacher Deckel darüber, ein Dreieck darauf, dann der nächste Abschnitt rechts daneben. Fehler lassen den Turm wackeln, jeder gesicherte Stand hält ihn — darunter stürzt alles ein. Ganz oben wartet die fertige Pyramide aus ${MAX_HEIGHT} Deckeln!</p>
+        <p class="hint">Ab Höhe ${CANNON_MIN_HEIGHT} kommen Kanonen-Fragen: Lösung eintippen statt auswählen — daneben, und die Kanone reißt einen zufälligen Abschnitt samt allem darüber weg. Ab Höhe ${WIND_MIN_HEIGHT} können Böen am obersten Abschnitt zerren.</p>
         <p class="hint">Aktueller Bestwert: <strong>${bestHeight}</strong></p>
         <button class="btn btn-huge mode-choice-btn btn-primary btn-with-icon" id="start-btn">
           <span class="icon-inline-wrap icon-lg">${playIcon}</span>
@@ -784,7 +875,7 @@ export function mount(container) {
     container.innerHTML = `
       <div class="quiz-mode challenge-mode">
         <div class="quiz-content">
-          <p class="cannon-warning center-text">💨 Eine Böe erfasst den Turm! Schnell richtig antworten, sonst fällt die oberste Reihe.</p>
+          <p class="cannon-warning center-text">💨 Eine Böe erfasst den Turm! Schnell richtig antworten, sonst fällt der oberste Abschnitt.</p>
           ${timerHtml()}
           <p class="hint center-text">${escapeHtml(q.promptLabel)}</p>
           <div class="quiz-word">${escapeHtml(q.prompt)}</div>
@@ -871,7 +962,7 @@ export function mount(container) {
     container.querySelector('#switch-btn').addEventListener('click', backToSelect);
   }
 
-  function render() {
+  function renderPhase() {
     if (phase === 'select') return renderSelect();
     if (phase === 'empty') return renderEmpty();
     if (phase === 'loading') return renderLoading();
@@ -883,6 +974,11 @@ export function mount(container) {
     if (phase === 'collapsing') return renderCollapsing();
     if (phase === 'boss') return renderBoss();
     if (phase === 'results') return renderResults();
+  }
+
+  function render() {
+    renderPhase();
+    fitTowerZoom();
   }
 
   (async () => {

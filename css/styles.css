@@ -977,9 +977,8 @@ textarea:focus {
    pinned to the bottom of it, so the tower grows upward into that space
    instead of the whole block re-centring on every new coaster. */
 .tower-stage .tower-wrap {
-  justify-content: flex-end;
-  /* Room for the finished pyramid, so the tower grows upward from a fixed
-     ground line — capped relatively so short screens keep the button in view. */
+  /* The frame the tower is fitted into — capped relatively so short screens
+     keep the button in view. */
   min-height: min(440px, 58vh);
 }
 
@@ -1057,9 +1056,11 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   padding-top: 22px;
   min-height: 40px;
   width: 100%;
+  overflow: hidden;
   /* A sheet of sketchbook paper for the drawing to sit on: faint tooth over
      an off-white ground. */
   background-color: rgba(255, 255, 255, 0.55);
@@ -1084,6 +1085,16 @@ textarea:focus {
   height: 0;
 }
 
+/* The camera: scaled and centred from JS (see fitTowerZoom) so whatever is
+   standing fills the frame. */
+.tower-zoom {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  will-change: transform;
+}
+
 /* The whole tower is turned a little, the way you'd look at one standing on a
    table: the coaster drawings show their faces in the same direction, and the
    perspective makes the upper rows sit slightly further away. */
@@ -1091,7 +1102,9 @@ textarea:focus {
   display: flex;
   flex-direction: column-reverse;
   align-items: center;
-  gap: 4px;
+  /* No air between the rows: a flat coaster rests on the apexes below it, and
+     the next triangles stand right on that. */
+  gap: 0;
   transform-origin: bottom center;
   transform: var(--tower-turn);
 }
@@ -1126,14 +1139,38 @@ textarea:focus {
   opacity: 0;
 }
 
-@keyframes coasterPlace {
-  from { opacity: 0; transform: translateY(-16px); }
-  to { opacity: 1; transform: translateY(0); }
+/* A new triangle: the two coasters slide in from either side and tip against
+   each other, the way you'd set them up by hand. */
+@keyframes coasterSlideInLeft {
+  from { opacity: 0; transform: translateX(-30px) rotate(62deg); }
+  70% { transform: translateX(0) rotate(18deg); }
+  to { opacity: 1; transform: translateX(0) rotate(24deg); }
 }
 
-.coaster-triangle-new,
+@keyframes coasterSlideInRight {
+  from { opacity: 0; transform: translateX(30px) rotate(-62deg); }
+  70% { transform: translateX(0) rotate(-18deg); }
+  to { opacity: 1; transform: translateX(0) rotate(-24deg); }
+}
+
+.coaster-triangle-new .coaster-leg.left {
+  animation: coasterSlideInLeft 0.42s ease-out;
+}
+
+.coaster-triangle-new .coaster-leg.right {
+  animation: coasterSlideInRight 0.42s ease-out;
+}
+
+/* A bridging coaster drops onto the two triangles and settles. */
+@keyframes plateDrop {
+  from { opacity: 0; transform: translateY(-38px) rotate(-5deg); }
+  65% { opacity: 1; transform: translateY(0) rotate(0deg); }
+  80% { transform: translateY(-4px); }
+  to { transform: translateY(0); }
+}
+
 .tier-plate-new {
-  animation: coasterPlace 0.35s ease-out;
+  animation: plateDrop 0.5s ease-in;
 }
 
 /* A coaster that hasn't been placed yet: it holds its spot so the ones that
@@ -1218,6 +1255,8 @@ textarea:focus {
   display: flex;
   justify-content: center;
   gap: 3px;
+  /* Seats the flat coasters onto the apexes they bridge. */
+  margin: -1px 0 -3px;
 }
 
 .tier-plate {
@@ -1228,8 +1267,10 @@ textarea:focus {
 }
 
 /* The pencilled ground line the tower stands on — turned with the tower so it
-   reads as the table's surface rather than a flat line in front of it. */
+   reads as the table's surface rather than a flat line in front of it. Placed
+   and sized from JS, under whatever is standing (see fitTowerZoom). */
 .tower-ground {
+  position: absolute;
   transform: var(--tower-turn);
   transform-origin: center top;
   width: 200px;
@@ -1242,24 +1283,6 @@ textarea:focus {
 
 .tower-height-label {
   margin: 2px 0 0;
-}
-
-.tower-best-line {
-  position: absolute;
-  left: 12%;
-  right: 12%;
-  border-top: 1.5px dashed var(--ink, rgba(52, 50, 66, 0.95));
-  opacity: 0.55;
-}
-
-.tower-best-line span {
-  position: absolute;
-  right: 0;
-  top: -17px;
-  font-size: 0.68rem;
-  color: var(--ink, rgba(52, 50, 66, 0.95));
-  padding: 0 4px;
-  white-space: nowrap;
 }
 
 /* Each keyframe keeps the tower's 3D turn and only adds the sway on top. */

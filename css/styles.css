@@ -1243,9 +1243,9 @@ textarea:focus {
 }
 
 /* Light falls from the top left, so the far coaster of each pair sits in
-   its partner's shade — drawn as denser hatching, not a dimmer colour. */
+   its partner's shade — drawn as hatching, not a dimmer colour. */
 .coaster-leg.right .coaster-shade {
-  opacity: 0.95;
+  opacity: 0.85;
 }
 
 .coaster-leg.right .coaster-edge {

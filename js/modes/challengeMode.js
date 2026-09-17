@@ -589,8 +589,11 @@ export function mount(container) {
   function coasterSvg(side) {
     return `<svg class="coaster-leg ${side}" viewBox="0 0 11 40" preserveAspectRatio="none" aria-hidden="true">
       <path class="coaster-face" d="M2.6 1.4 10.1 3.5 10.4 35.8 3.1 38.2Z"/>
-      <path class="coaster-shade" d="M2.6 1.4 10.1 3.5 10.4 35.8 3.1 38.2Z"/>
-      ${side === 'left' ? coasterLogoSvg() : ''}
+      ${side === 'left'
+        // The inner face carries the print and nothing else; the hatching sits
+        // on its partner, which is the face turned away from the light anyway.
+        ? coasterLogoSvg()
+        : '<path class="coaster-shade" d="M2.6 1.4 10.1 3.5 10.4 35.8 3.1 38.2Z"/>'}
       <path class="coaster-edge" d="M0.9 2 2.6 1.4 3.1 38.2 1.4 38.8Z"/>
       <path class="coaster-sketch" d="M1.5 4.6 1.8 36.4M3.5 2.1 9.5 3.8"/>
     </svg>`;

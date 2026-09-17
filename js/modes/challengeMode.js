@@ -487,7 +487,7 @@ export function mount(container) {
   const TIER_CAPACITIES = [7, 6, 5, 4, 3, 2, 1];
   const TRIANGLE_H = 40;
   const TIER_GAP = 4;
-  const BRIDGE_H = 7;
+  const BRIDGE_H = 5;
 
   function buildTiers(displayHeight) {
     const tiers = [];
@@ -531,27 +531,29 @@ export function mount(container) {
   }
 
   /**
-   * One coaster, drawn rather than boxed: a hand-wobbled outline, graphite
-   * hatching over a paper face, and a narrow side face for its thickness.
-   * Colours come from CSS custom properties so checkpoints and the shaded
-   * side of each pair can restyle the same drawing.
+   * One coaster, drawn rather than boxed. Since the tower is turned slightly
+   * (see --tower-turn), a leaning coaster shows two planes: the thin strip of
+   * cardboard thickness facing the viewer, and the much wider face running
+   * away from it. Drawing it that way is what makes it read as a coaster on
+   * edge rather than a block. Colours come from CSS custom properties so
+   * checkpoints and the shaded side of each pair restyle the same drawing.
    */
   function coasterSvg(side) {
-    return `<svg class="coaster-leg ${side}" viewBox="0 0 22 80" preserveAspectRatio="none" aria-hidden="true">
-      <path class="coaster-side" d="M15.4 2.8 19.1 5.4 19.6 73.6 16.1 76.3Z"/>
-      <path class="coaster-face" d="M3.1 3.6 15.4 2.8 16.1 76.3 3.7 77.1Z"/>
-      <path class="coaster-shade" d="M3.1 3.6 15.4 2.8 16.1 76.3 3.7 77.1Z"/>
-      <path class="coaster-sketch" d="M4.3 7.2 4.6 72.4M5.2 3.4 14.6 2.9M4.6 76.6 15.3 75.8"/>
+    return `<svg class="coaster-leg ${side}" viewBox="0 0 11 40" preserveAspectRatio="none" aria-hidden="true">
+      <path class="coaster-face" d="M2.6 1.4 10.1 3.5 10.4 35.8 3.1 38.2Z"/>
+      <path class="coaster-shade" d="M2.6 1.4 10.1 3.5 10.4 35.8 3.1 38.2Z"/>
+      <path class="coaster-edge" d="M0.9 2 2.6 1.4 3.1 38.2 1.4 38.8Z"/>
+      <path class="coaster-sketch" d="M1.5 4.6 1.8 36.4M3.5 2.1 9.5 3.8"/>
     </svg>`;
   }
 
-  /** The flat coaster bridging two triangles, drawn in the same pencil style. */
+  /** The flat coaster bridging two triangles: a sliver of its top surface, and its edge below. */
   function plateSvg(extraClass = '') {
-    return `<svg class="tier-plate${extraClass}" viewBox="0 0 88 14" preserveAspectRatio="none" aria-hidden="true">
-      <path class="coaster-side" d="M3.4 9.4 84.6 9.1 84.2 12.4 3.8 12.7Z"/>
-      <path class="coaster-face" d="M3.4 2.2 84.6 1.9 84.6 9.1 3.4 9.4Z"/>
-      <path class="coaster-shade" d="M3.4 2.2 84.6 1.9 84.6 9.1 3.4 9.4Z"/>
-      <path class="coaster-sketch" d="M6.5 3.2 82 2.9"/>
+    return `<svg class="tier-plate${extraClass}" viewBox="0 0 44 5" preserveAspectRatio="none" aria-hidden="true">
+      <path class="coaster-face" d="M4.2 0.7 42.6 0.6 40.1 2.3 1.7 2.4Z"/>
+      <path class="coaster-shade" d="M4.2 0.7 42.6 0.6 40.1 2.3 1.7 2.4Z"/>
+      <path class="coaster-edge" d="M1.7 2.4 40.1 2.3 40.2 3.7 1.8 3.8Z"/>
+      <path class="coaster-sketch" d="M3.4 2.9 38.6 2.8"/>
     </svg>`;
   }
 
@@ -559,8 +561,8 @@ export function mount(container) {
   function inkDefsSvg() {
     return `<svg class="tower-ink-defs" aria-hidden="true">
       <defs>
-        <pattern id="coasterHatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(38)">
-          <line x1="0" y1="0" x2="0" y2="5" stroke="currentColor" stroke-width="1.1" />
+        <pattern id="coasterHatch" width="2.6" height="2.6" patternUnits="userSpaceOnUse" patternTransform="rotate(38)">
+          <line x1="0" y1="0" x2="0" y2="2.6" stroke="currentColor" stroke-width="0.55" />
         </pattern>
       </defs>
     </svg>`;

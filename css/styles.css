@@ -1079,19 +1079,26 @@ textarea:focus {
   height: 0;
 }
 
+/* The whole tower is turned a little, the way you'd look at one standing on a
+   table: the coaster drawings show their faces in the same direction, and the
+   perspective makes the upper rows sit slightly further away. */
 .tower {
   display: flex;
   flex-direction: column-reverse;
   align-items: center;
   gap: 4px;
   transform-origin: bottom center;
+  /* translateX compensates the sideways shift the turn introduces, so the
+     tower stays centred on narrow screens. */
+  --tower-turn: perspective(900px) translateX(7px) rotateY(10deg) rotateX(4deg);
+  transform: var(--tower-turn);
 }
 
 .coaster-tier {
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  gap: 4px;
+  gap: 3px;
 }
 
 .coaster-triangle {
@@ -1148,18 +1155,20 @@ textarea:focus {
   transform: rotate(-24deg);
 }
 
-/* The drawing itself: paper face, graphite outline, hatched side face. */
+/* The wide plane running away from the viewer — the coaster's face, seen at a
+   grazing angle, so it carries most of the shading. */
 .coaster-face {
-  fill: var(--paper);
+  fill: var(--wash);
   stroke: var(--ink);
-  stroke-width: 1.4;
+  stroke-width: 0.7;
   stroke-linejoin: round;
 }
 
-.coaster-side {
-  fill: var(--wash);
+/* The cardboard's thickness, facing the viewer: the thin bright profile. */
+.coaster-edge {
+  fill: var(--paper);
   stroke: var(--ink);
-  stroke-width: 1.2;
+  stroke-width: 0.6;
   stroke-linejoin: round;
 }
 
@@ -1167,26 +1176,26 @@ textarea:focus {
   fill: url(#coasterHatch);
   stroke: none;
   color: var(--hatch);
-  opacity: 0.5;
+  opacity: 0.55;
 }
 
 /* The second, slightly-off stroke a pencil leaves when retracing an edge. */
 .coaster-sketch {
   fill: none;
   stroke: var(--ink);
-  stroke-width: 0.7;
+  stroke-width: 0.35;
   stroke-linecap: round;
-  opacity: 0.5;
+  opacity: 0.55;
 }
 
 /* Light falls from the top left, so the far coaster of each pair sits in
    its partner's shade — drawn as denser hatching, not a dimmer colour. */
 .coaster-leg.right .coaster-shade {
-  opacity: 0.9;
+  opacity: 0.95;
 }
 
-.coaster-leg.right .coaster-face {
-  fill: rgba(246, 245, 248, 0.92);
+.coaster-leg.right .coaster-edge {
+  fill: rgba(246, 245, 248, 0.94);
 }
 
 .coaster-triangle-checkpoint .coaster-leg {
@@ -1199,12 +1208,12 @@ textarea:focus {
 .tier-plates {
   display: flex;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .tier-plate {
   width: 44px;
-  height: 7px;
+  height: 5px;
   overflow: visible;
   filter: drop-shadow(0 2px 2px rgba(51, 47, 77, 0.22));
 }
@@ -1241,20 +1250,21 @@ textarea:focus {
   white-space: nowrap;
 }
 
+/* Each keyframe keeps the tower's 3D turn and only adds the sway on top. */
 @keyframes towerWobbleLight {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(0.6deg); }
+  0%, 100% { transform: var(--tower-turn) rotate(0deg); }
+  50% { transform: var(--tower-turn) rotate(0.6deg); }
 }
 
 @keyframes towerWobbleMedium {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(1.5deg); }
+  0%, 100% { transform: var(--tower-turn) rotate(0deg); }
+  50% { transform: var(--tower-turn) rotate(1.5deg); }
 }
 
 @keyframes towerWobbleStrong {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-2.4deg); }
-  75% { transform: rotate(2.4deg); }
+  0%, 100% { transform: var(--tower-turn) rotate(0deg); }
+  25% { transform: var(--tower-turn) rotate(-2.4deg); }
+  75% { transform: var(--tower-turn) rotate(2.4deg); }
 }
 
 .tower.wobble-light { animation: towerWobbleLight 2.6s ease-in-out infinite; }

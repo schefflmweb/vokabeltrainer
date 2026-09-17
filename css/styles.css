@@ -1071,6 +1071,11 @@ textarea:focus {
   --paper: rgba(255, 255, 255, 0.94);
   --wash: rgba(52, 50, 66, 0.22);
   --hatch: rgba(52, 50, 66, 0.5);
+  /* Turned so the right-hand side stands nearer the viewer, which is also the
+     direction the coaster faces recede in (see coasterSvg). translateX
+     compensates the sideways shift the turn introduces, so the tower stays
+     centred on narrow screens. Shared with the ground line below it. */
+  --tower-turn: perspective(820px) translateX(-7px) rotateY(-16deg) rotateX(4deg);
 }
 
 .tower-ink-defs {
@@ -1088,9 +1093,6 @@ textarea:focus {
   align-items: center;
   gap: 4px;
   transform-origin: bottom center;
-  /* translateX compensates the sideways shift the turn introduces, so the
-     tower stays centred on narrow screens. */
-  --tower-turn: perspective(900px) translateX(7px) rotateY(10deg) rotateX(4deg);
   transform: var(--tower-turn);
 }
 
@@ -1218,9 +1220,12 @@ textarea:focus {
   filter: drop-shadow(0 2px 2px rgba(51, 47, 77, 0.22));
 }
 
-/* The pencilled ground line the tower stands on. */
+/* The pencilled ground line the tower stands on — turned with the tower so it
+   reads as the table's surface rather than a flat line in front of it. */
 .tower-ground {
-  width: 170px;
+  transform: var(--tower-turn);
+  transform-origin: center top;
+  width: 200px;
   height: 2px;
   background: linear-gradient(90deg, transparent, var(--ink, rgba(58, 56, 72, 0.85)) 12%, var(--ink, rgba(58, 56, 72, 0.85)) 88%, transparent);
   opacity: 0.7;

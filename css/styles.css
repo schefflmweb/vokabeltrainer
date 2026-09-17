@@ -1225,6 +1225,14 @@ textarea:focus {
   opacity: 0.55;
 }
 
+/* Printed, not built: kept faint so it never competes with the outlines. */
+.coaster-logo ellipse {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 0.32;
+  opacity: 0.5;
+}
+
 /* The second, slightly-off stroke a pencil leaves when retracing an edge. */
 .coaster-sketch {
   fill: none;

@@ -590,9 +590,23 @@ export function mount(container) {
     return `<svg class="coaster-leg ${side}" viewBox="0 0 11 40" preserveAspectRatio="none" aria-hidden="true">
       <path class="coaster-face" d="M2.6 1.4 10.1 3.5 10.4 35.8 3.1 38.2Z"/>
       <path class="coaster-shade" d="M2.6 1.4 10.1 3.5 10.4 35.8 3.1 38.2Z"/>
+      ${side === 'left' ? coasterLogoSvg() : ''}
       <path class="coaster-edge" d="M0.9 2 2.6 1.4 3.1 38.2 1.4 38.8Z"/>
       <path class="coaster-sketch" d="M1.5 4.6 1.8 36.4M3.5 2.1 9.5 3.8"/>
     </svg>`;
+  }
+
+  /**
+   * The print on the coaster's face: a double ring. Seen this far off-axis a
+   * round logo reads as a narrow oval, and the skew matches the face it sits
+   * on. Only the left coaster of a pair shows it — that's the one whose drawn
+   * face is the inner one, facing its partner.
+   */
+  function coasterLogoSvg() {
+    return `<g class="coaster-logo" transform="translate(6.5 19.8) skewY(15.6) translate(-6.5 -19.8)">
+      <ellipse cx="6.5" cy="19.8" rx="2" ry="8.4"/>
+      <ellipse cx="6.5" cy="19.8" rx="1.25" ry="5.4"/>
+    </g>`;
   }
 
   /** The flat coaster bridging two triangles: a sliver of its top surface, and its edge below. */

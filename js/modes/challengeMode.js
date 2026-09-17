@@ -7,19 +7,55 @@ import {
   playIcon, refreshIcon, starIcon, checkCircleIcon, xCircleIcon, hourglassIcon, warningIcon
 } from '../ui/icons.js';
 
-// A full pyramid: seven rows of triangles, from seven at the base to one at
-// the top (see TIER_CAPACITIES), which is as wide and as tall as a phone
-// screen fits. Every height point is one more triangle, so the last one
-// placed completes the tower.
-const MAX_HEIGHT = 28;
-// One per completed row — a row that's finished is what makes a real tower stable.
-const CHECKPOINTS = [7, 13, 18, 22];
-const WAGER_UNLOCK_HEIGHT = 11;
-const GOLDEN_UNLOCK_HEIGHT = 17;
-const TIMER_START_HEIGHT = 14;
-const TIMER_HARD_HEIGHT = 21;
+// How the tower is built, in the order a real one goes up: a row of leaning
+// triangles, then one flat coaster across each adjacent pair of them, then the
+// next (narrower) row of triangles resting on those, and so on up to a single
+// triangle at the top. Seven triangles at the base is as wide as a phone
+// screen fits.
+const TIER_CAPACITIES = [7, 6, 5, 4, 3, 2, 1];
+
+/** Every band of coasters, bottom to top. One coaster per round, so a band of n takes n rounds. */
+const BANDS = [];
+TIER_CAPACITIES.forEach((cap, i) => {
+  BANDS.push({ kind: 'triangles', count: cap });
+  // One flat coaster per pair of neighbours — that's what the next row rests on.
+  if (i < TIER_CAPACITIES.length - 1) BANDS.push({ kind: 'plates', count: cap - 1 });
+});
+
+/** The height at which each band is finished. */
+const BAND_ENDS = [];
+BANDS.forEach((band, i) => BAND_ENDS.push((BAND_ENDS[i - 1] || 0) + band.count));
+
+const MAX_HEIGHT = BAND_ENDS[BAND_ENDS.length - 1];
+// A finished row of triangles is what makes a real tower stable, so that's
+// where the safe points sit (the very top doesn't need one).
+const CHECKPOINTS = BANDS
+  .map((band, i) => (band.kind === 'triangles' ? BAND_ENDS[i] : 0))
+  .filter((end) => end > 0 && end < MAX_HEIGHT);
+const WAGER_UNLOCK_HEIGHT = 19;
+const GOLDEN_UNLOCK_HEIGHT = 30;
+const TIMER_START_HEIGHT = 24;
+const TIMER_HARD_HEIGHT = 37;
 // From here on a plain wrong answer costs three coasters instead of two.
-const HARSH_PENALTY_HEIGHT = 21;
+const HARSH_PENALTY_HEIGHT = 37;
+
+/** The band the topmost coaster sits in. */
+function bandIndexOf(h) {
+  for (let i = 0; i < BAND_ENDS.length; i++) {
+    if (h <= BAND_ENDS[i]) return i;
+  }
+  return BAND_ENDS.length - 1;
+}
+
+/** What's left standing when everything from `bandIndex` upward comes off. */
+function heightBelowBand(bandIndex) {
+  return bandIndex === 0 ? 0 : BAND_ENDS[bandIndex - 1];
+}
+
+/** Which row of the pyramid a band belongs to, for telling the player where they were hit. */
+function bandRowNumber(bandIndex) {
+  return Math.floor(bandIndex / 2) + 1;
+}
 const TIMER_SECONDS_MEDIUM = 15;
 // How long the answer stays coloured on the question screen before the tower page takes over.
 const REVEAL_FLASH_MS = 200;
@@ -27,7 +63,7 @@ const TIMER_SECONDS_HARD = 10;
 
 // Cannon rounds: no options, type the word yourself. Get it wrong and a
 // cannonball takes out a random row — and everything resting on it.
-const CANNON_MIN_HEIGHT = 6;
+const CANNON_MIN_HEIGHT = 10;
 const CANNON_CHANCE = 0.3;
 const CANNON_REWARD = 2;
 const TIMER_SECONDS_CANNON = 25;
@@ -36,7 +72,7 @@ const CANNON_IMPACT_MS = 900;
 
 // Gusts: between two questions the tower can be caught by the wind, and only
 // a quick right answer keeps the top row on.
-const WIND_MIN_HEIGHT = 12;
+const WIND_MIN_HEIGHT = 21;
 const WIND_CHANCE = 0.2;
 const WIND_SECONDS = 6;
 
@@ -294,39 +330,15 @@ export function mount(container) {
     endSession();
   }
 
-  /** Cumulative heights at which each row of the pyramid is complete, e.g. [7, 13, 18, …]. */
-  function rowEnds() {
-    const ends = [];
-    let sum = 0;
-    for (const cap of TIER_CAPACITIES) {
-      sum += cap;
-      ends.push(sum);
-    }
-    return ends;
-  }
-
-  /** What's left standing when everything from `rowIndex` upward comes off. */
-  function heightBelowRow(rowIndex) {
-    return rowIndex === 0 ? 0 : rowEnds()[rowIndex - 1];
-  }
-
-  /** The row the topmost coaster sits in. */
-  function topRowIndex(h) {
-    const ends = rowEnds();
-    for (let i = 0; i < ends.length; i++) {
-      if (h <= ends[i]) return i;
-    }
-    return ends.length - 1;
-  }
-
   /**
-   * A missed cannon round. The ball picks a row at random — checkpoints don't
+   * A missed cannon round. The ball picks a band at random — checkpoints don't
    * shield it — and everything from there up comes down with it.
    */
   function fireCannon() {
-    const standingRows = topRowIndex(Math.max(height, 0)) + 1;
-    const hitRow = Math.floor(Math.random() * standingRows);
-    cannonTargetHeight = heightBelowRow(hitRow);
+    const standingBands = bandIndexOf(Math.max(height, 0)) + 1;
+    const hitBand = Math.floor(Math.random() * standingBands);
+    const hitRow = bandRowNumber(hitBand);
+    cannonTargetHeight = heightBelowBand(hitBand);
     cannonStage = 'incoming';
     phase = 'cannon';
     render();
@@ -342,7 +354,7 @@ export function mount(container) {
         height = cannonTargetHeight;
         towerEvent = {
           icon: xCircleIcon,
-          text: `Volltreffer in Reihe ${hitRow + 1} — ${lost} Deckel weg. Richtig wäre: ${correctAnswerText(currentQuestion)}`
+          text: `Volltreffer in Reihe ${hitRow} — ${lost} Deckel weg. Richtig wäre: ${correctAnswerText(currentQuestion)}`
         };
         phase = 'stacking';
         render();
@@ -382,13 +394,13 @@ export function mount(container) {
     if (index === windQuestion.correctIndex) {
       towerEvent = { icon: checkCircleIcon, text: 'Böe überstanden — der Turm hält!' };
     } else {
-      const newHeight = heightBelowRow(topRowIndex(Math.max(height, 0)));
+      const newHeight = heightBelowBand(bandIndexOf(Math.max(height, 0)));
       const lost = Math.max(height, 0) - newHeight;
       height = newHeight;
       toneService.playCollapse();
       towerEvent = {
         icon: xCircleIcon,
-        text: `Die Böe fegt die oberste Reihe weg — ${lost} Deckel weg. Richtig wäre: ${correctAnswerText(windQuestion)}`
+        text: `Die Böe räumt die oberste Lage ab — ${lost} Deckel weg. Richtig wäre: ${correctAnswerText(windQuestion)}`
       };
     }
     phase = 'stacking';
@@ -480,36 +492,20 @@ export function mount(container) {
   // --- Rendering ---
 
   // A real coaster tower is built from A-frame triangles (two coasters leaned
-  // against each other), several triangles side by side per row, with the
-  // next (narrower) row resting on a bridge across the row below — a stepped
-  // pyramid. TIER_CAPACITIES (bottom to top) sums to exactly MAX_HEIGHT, so
-  // every height point maps to one more triangle somewhere in the pyramid.
-  const TIER_CAPACITIES = [7, 6, 5, 4, 3, 2, 1];
+  // against each other), several triangles side by side per row, and one flat
+  // coaster across each adjacent pair for the next row to rest on — see BANDS
+  // for the build order.
   const TRIANGLE_H = 40;
   const TIER_GAP = 4;
   const BRIDGE_H = 5;
 
-  function buildTiers(displayHeight) {
-    const tiers = [];
-    let consumed = 0;
-    for (const cap of TIER_CAPACITIES) {
-      const count = Math.max(0, Math.min(cap, displayHeight - consumed));
-      tiers.push({ cap, count, start: consumed + 1 });
-      consumed += cap;
-      if (displayHeight <= consumed) break;
-    }
-    return tiers;
-  }
-
-  function bestLineOffset(height) {
-    let consumed = 0;
+  function bestLineOffset(targetHeight) {
+    let step = 0;
     let offsetPx = 0;
-    for (let idx = 0; idx < TIER_CAPACITIES.length; idx++) {
-      const cap = TIER_CAPACITIES[idx];
-      if (height <= consumed + cap) return offsetPx;
-      offsetPx += TRIANGLE_H + TIER_GAP;
-      if (idx < TIER_CAPACITIES.length - 1) offsetPx += BRIDGE_H + TIER_GAP;
-      consumed += cap;
+    for (const band of BANDS) {
+      if (targetHeight <= step + band.count) return offsetPx;
+      offsetPx += (band.kind === 'triangles' ? TRIANGLE_H : BRIDGE_H) + TIER_GAP;
+      step += band.count;
     }
     return offsetPx;
   }
@@ -528,6 +524,33 @@ export function mount(container) {
       ${coasterSvg('left')}
       ${coasterSvg('right')}
     </div>`;
+  }
+
+  function plateEl(levelIndex, opts = {}) {
+    const falling = opts.collapseAbove != null && levelIndex > opts.collapseAbove;
+    const justPlaced = opts.newAbove != null && levelIndex > opts.newAbove;
+    return plateSvg(`${falling ? ' tier-plate-falling' : ''}${justPlaced ? ' tier-plate-new' : ''}`);
+  }
+
+  /**
+   * Every band is laid out at its finished width, with the coasters that
+   * aren't placed yet left as invisible slots. That keeps a half-built band
+   * left-aligned, so each flat coaster lands on the two triangles it bridges
+   * and the row above sits exactly on those.
+   */
+  function bandHtml(band, placed, firstStep, opts) {
+    let items = '';
+    for (let k = 0; k < band.count; k++) {
+      if (k >= placed) {
+        items += band.kind === 'triangles'
+          ? '<div class="coaster-triangle coaster-slot"></div>'
+          : '<div class="tier-plate coaster-slot"></div>';
+        continue;
+      }
+      const step = firstStep + k;
+      items += band.kind === 'triangles' ? triangleEl(step, opts) : plateEl(step, opts);
+    }
+    return `<div class="${band.kind === 'triangles' ? 'coaster-tier' : 'tier-plates'}">${items}</div>`;
   }
 
   /**
@@ -569,25 +592,15 @@ export function mount(container) {
   }
 
   function towerHtml(displayHeight, opts = {}) {
-    const wobbleClass = displayHeight >= 15 ? 'wobble-strong' : displayHeight >= 10 ? 'wobble-medium' : displayHeight >= 5 ? 'wobble-light' : '';
-    const tiers = buildTiers(displayHeight);
+    const wobbleClass = displayHeight >= 30 ? 'wobble-strong' : displayHeight >= 20 ? 'wobble-medium' : displayHeight >= 10 ? 'wobble-light' : '';
     let rows = '';
-    tiers.forEach((tier, idx) => {
-      if (tier.count <= 0) return;
-      let triangles = '';
-      for (let i = 0; i < tier.count; i++) triangles += triangleEl(tier.start + i, opts);
-      rows += `<div class="coaster-tier">${triangles}</div>`;
-      const isTopTier = idx === TIER_CAPACITIES.length - 1;
-      if (tier.count === tier.cap && !isTopTier) {
-        // One flat coaster per triangle of the row above, so each plate lands
-        // where a triangle actually rests on it. Before that row exists, a
-        // single plate already sits there, ready for the next triangle.
-        const plateCount = Math.max(1, tiers[idx + 1]?.count ?? 0);
-        const plateFalls = opts.collapseAbove != null && tier.start + tier.cap - 1 >= opts.collapseAbove;
-        const plate = plateSvg(plateFalls ? ' tier-plate-falling' : '');
-        rows += `<div class="tier-plates">${plate.repeat(plateCount)}</div>`;
-      }
-    });
+    let step = 0;
+    for (const band of BANDS) {
+      const placed = Math.max(0, Math.min(band.count, displayHeight - step));
+      if (placed <= 0) break;
+      rows += bandHtml(band, placed, step + 1, opts);
+      step += band.count;
+    }
     // Only worth drawing while it's still a target ahead — once passed, the
     // line would just cut across the tower it's meant to celebrate.
     const bestMarker = bestHeight > displayHeight && bestHeight <= MAX_HEIGHT
@@ -607,7 +620,7 @@ export function mount(container) {
     container.innerHTML = `
       <div class="quiz-mode challenge-mode pad center-text">
         <h2>🍺 Bierdeckel-Challenge</h2>
-        <p class="hint">Jede richtige Antwort legt einen Deckel auf den Turm. Fehler lassen ihn wackeln — jede fertige Reihe (Höhe ${CHECKPOINTS.join('/')}) sichert deinen Stand, darunter stürzt alles ein. Ganz oben wartet die fertige Pyramide mit ${MAX_HEIGHT} Deckeln!</p>
+        <p class="hint">Jede richtige Antwort legt genau einen Deckel: erst eine Reihe Dreiecke, dann je einen flachen Deckel über zwei Dreiecke, darauf die nächste Reihe. Fehler lassen den Turm wackeln — jede fertige Dreiecksreihe sichert deinen Stand, darunter stürzt alles ein. Ganz oben wartet die fertige Pyramide aus ${MAX_HEIGHT} Deckeln!</p>
         <p class="hint">Ab Höhe ${CANNON_MIN_HEIGHT} kommen Kanonen-Fragen: Lösung eintippen statt auswählen — daneben, und die Kanone schießt eine zufällige Reihe weg. Ab Höhe ${WIND_MIN_HEIGHT} können Böen an der obersten Reihe zerren.</p>
         <p class="hint">Aktueller Bestwert: <strong>${bestHeight}</strong></p>
         <button class="btn btn-huge mode-choice-btn btn-primary btn-with-icon" id="start-btn">

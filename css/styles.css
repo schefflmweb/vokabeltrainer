@@ -1131,8 +1131,15 @@ textarea:focus {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.coaster-triangle-new {
+.coaster-triangle-new,
+.tier-plate-new {
   animation: coasterPlace 0.35s ease-out;
+}
+
+/* A coaster that hasn't been placed yet: it holds its spot so the ones that
+   have stay aligned with the triangles they bridge. */
+.coaster-slot {
+  visibility: hidden;
 }
 
 /* Both legs pivot around their own bottom centre, placed so that each one's

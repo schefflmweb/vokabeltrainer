@@ -1,9 +1,10 @@
 /**
- * iOS Safari only allows speechSynthesis.speak() when the call happens
- * synchronously inside a user-gesture handler (tap/click). A call made later
- * from a timer, promise, or event callback is silently dropped. So every
- * public function here must be invoked directly from a click handler, and
- * queues its utterances synchronously in one go — never via setTimeout.
+ * iOS Safari only allows speechSynthesis.speak() once the page has called it
+ * synchronously inside a user-gesture handler (tap/click); before that, calls
+ * from a timer, promise, or event callback are silently dropped. Sessions
+ * therefore call prime() from their start tap. When nothing is playing,
+ * speech starts synchronously, so a tap-triggered call still counts as a
+ * gesture; only replacing speech that is still playing defers by a moment.
  */
 
 let voicesCache = [];
@@ -60,27 +61,92 @@ function pickVoice(langPrefix) {
   return preferred || candidates[0];
 }
 
-function speakOne(text, langPrefix, rate) {
+// Chrome garbage-collects utterances nothing references any more, and then
+// their onend never fires — which silently broke every "speak, then continue"
+// chain. Holding them here until they finish prevents that.
+const liveUtterances = new Set();
+
+// Bumped on every new speech request, so end/error callbacks from utterances
+// that were cancelled in favour of newer speech are ignored.
+let generation = 0;
+
+// Chrome and Safari both tend to drop an utterance queued in the same tick
+// as cancel(). Only cancel when something is actually playing, and then give
+// the engine a moment before speaking again.
+const AFTER_CANCEL_DELAY_MS = 80;
+
+function speakOne(text, langPrefix, { rate, gen, onDone } = {}) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = langPrefix === 'en' ? 'en-US' : 'de-DE';
   utterance.rate = rate || 0.95;
   const voice = pickVoice(langPrefix);
   if (voice) utterance.voice = voice;
+  let settled = false;
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    liveUtterances.delete(utterance);
+    if (gen === generation) onDone?.();
+  };
+  // Safari reports some failures only via onerror, never onend.
+  utterance.onend = finish;
+  utterance.onerror = finish;
+  liveUtterances.add(utterance);
   speechSynthesis.speak(utterance);
   return utterance;
 }
 
+/** Starts a new speech request, replacing whatever is playing. run() receives this request's generation. */
+function startFresh(run) {
+  generation += 1;
+  const gen = generation;
+  const busy = speechSynthesis.speaking || speechSynthesis.pending;
+  if (busy) speechSynthesis.cancel();
+  // Chrome can get stuck in a paused state (e.g. after the tab was in the background).
+  speechSynthesis.resume();
+  if (!busy) {
+    run(gen);
+    return;
+  }
+  setTimeout(() => {
+    if (gen === generation) run(gen);
+  }, AFTER_CANCEL_DELAY_MS);
+}
+
+/**
+ * Generous upper bound for how long speaking `text` takes — for callers'
+ * backstop timers. Online voices can add seconds of latency even for a
+ * single short word, so the base is large.
+ */
+function estimateDurationMs(text) {
+  return 3500 + (text?.length || 0) * 100;
+}
+
 export const ttsService = {
+  /**
+   * iOS only lets a page speak once speak() has been called from a real tap.
+   * Call this synchronously from the tap that starts a session; any speech
+   * after that may then start later (e.g. once the audio session is set up).
+   */
+  prime() {
+    const utterance = new SpeechSynthesisUtterance(' ');
+    utterance.volume = 0;
+    speechSynthesis.speak(utterance);
+  },
+
+  estimateDurationMs,
+
   /**
    * Speaks a sequence of { text, lang } items back-to-back. Must be called
    * synchronously from within a click/tap handler.
    */
   speakChain(items) {
-    speechSynthesis.cancel(); // clear anything stuck queued from before
-    for (const item of items) {
-      if (!item.text) continue;
-      speakOne(item.text, item.lang, item.rate);
-    }
+    startFresh((gen) => {
+      for (const item of items) {
+        if (!item.text) continue;
+        speakOne(item.text, item.lang, { rate: item.rate, gen });
+      }
+    });
   },
 
   /** direction: 'en-de' speaks English first, 'de-en' speaks German first. The (English) example, if any, is always spoken last. */
@@ -104,9 +170,7 @@ export const ttsService = {
    * callers should offer a manual fallback control regardless.
    */
   speakOnce(text, langPrefix, { onEnd, rate } = {}) {
-    speechSynthesis.cancel();
-    const utterance = speakOne(text, langPrefix, rate);
-    if (onEnd) utterance.onend = onEnd;
+    startFresh((gen) => speakOne(text, langPrefix, { rate, gen, onDone: onEnd }));
   },
 
   /**
@@ -117,27 +181,29 @@ export const ttsService = {
    * caller-side timeout backstop is recommended in case onEnd never fires.
    */
   speakSequence(items, onEnd) {
-    speechSynthesis.cancel();
     const valid = items.filter((i) => i.text);
     if (valid.length === 0) {
+      generation += 1;
       onEnd?.();
       return;
     }
-    let i = 0;
-    const playNext = () => {
-      if (i >= valid.length) {
-        onEnd?.();
-        return;
-      }
-      const item = valid[i];
-      i += 1;
-      const utterance = speakOne(item.text, item.lang, item.rate);
-      utterance.onend = playNext;
-    };
-    playNext();
+    startFresh((gen) => {
+      let i = 0;
+      const playNext = () => {
+        if (i >= valid.length) {
+          onEnd?.();
+          return;
+        }
+        const item = valid[i];
+        i += 1;
+        speakOne(item.text, item.lang, { rate: item.rate, gen, onDone: playNext });
+      };
+      playNext();
+    });
   },
 
   stop() {
+    generation += 1;
     speechSynthesis.cancel();
   },
 
@@ -171,12 +237,13 @@ export const ttsService = {
 
   /** Speaks a short sample with a specific voice, for previewing in the voice picker — must be called directly from a click (see module doc). */
   previewVoice(langPrefix, voiceName, sampleText) {
-    speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(sampleText);
-    utterance.lang = langPrefix === 'en' ? 'en-US' : 'de-DE';
-    utterance.rate = 0.95;
-    const voice = voicesCache.find((v) => v.name === voiceName);
-    utterance.voice = voice || pickVoice(langPrefix);
-    speechSynthesis.speak(utterance);
+    startFresh(() => {
+      const utterance = new SpeechSynthesisUtterance(sampleText);
+      utterance.lang = langPrefix === 'en' ? 'en-US' : 'de-DE';
+      utterance.rate = 0.95;
+      const voice = voicesCache.find((v) => v.name === voiceName);
+      utterance.voice = voice || pickVoice(langPrefix);
+      speechSynthesis.speak(utterance);
+    });
   }
 };

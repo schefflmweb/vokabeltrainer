@@ -15,12 +15,6 @@ const SESSION_SIZE = 15;
 const LISTEN_TIMEOUT_MS = 8000;
 const REVEAL_DELAY_MS = 3000;
 const AUTO_ADVANCE_DELAY_MS = 800;
-const TAP_AUTO_ADVANCE_BACKSTOP_MS = 6000;
-// Backstop for the primary word's speakOnce() onEnd, in case it never fires
-// (speech silently dropped) — same reasoning as the other best-effort speech
-// chains in this file. Generous, since a real long word/phrase should still
-// finish speaking well within it.
-const PRIMARY_SPEECH_BACKSTOP_MS = 4000;
 // Pause before jumping to the next card, once the translation has finished
 // being spoken — and the only window during which the Stopp/Weiter button
 // is active (see revealTranslation()/enterStopWindow()).
@@ -40,6 +34,7 @@ export function mount(container) {
   let index = -1;
   let stats = { known: 0, unknown: 0 };
   let source = 'vocab'; // 'vocab' | 'idioms' | 'both'
+  let mounted = true;
 
   // Voice-mode per-card state
   let voiceState = 'idle'; // 'speaking' | 'listening' | 'result' | 'error'
@@ -127,13 +122,14 @@ export function mount(container) {
   function startSession() {
     if (!pendingQueue) return; // guarded by disabled button; shouldn't fire
     toneService.unlock(); // real tap — unlocks Web Audio for the rest of this session
-    audioSessionUnlock.start(); // real tap — nudges iOS toward routing audio to Bluetooth (see module doc)
+    ttsService.prime(); // real tap — unlocks speech, so the first word may start a moment later
+    const audioReady = audioSessionUnlock.start(); // real tap — nudges iOS toward routing audio to Bluetooth (see module doc)
     queue = pendingQueue;
     index = 0;
     stats = { known: 0, unknown: 0 };
     phase = queue.length > 0 ? 'active' : 'empty';
     prefetchQueue(); // load next round's due-list in the background
-    enterCard();
+    enterCard(audioReady);
   }
 
   function backToSelect() {
@@ -150,8 +146,12 @@ export function mount(container) {
     render();
   }
 
-  /** Called synchronously from a tap (start / next-card button) — speaks the current card and, in voice mode, chains into listening once speech ends. */
-  function enterCard() {
+  /**
+   * Speaks the current card and, in voice mode, chains into listening once
+   * speech ends. speechReady (session start only) delays the speech until
+   * the audio session has settled — see audioSessionUnlock.start().
+   */
+  function enterCard(speechReady = null) {
     pendingAdvance = false;
     if (autoAdvanceTimer) {
       clearTimeout(autoAdvanceTimer);
@@ -181,8 +181,12 @@ export function mount(container) {
         if (currentCard() !== card) return; // card changed while speech was playing
         tapRevealTimer = setTimeout(() => revealTranslation(card), REVEAL_DELAY_MS);
       };
-      ttsService.speakOnce(primaryText(card), promptLang(), { onEnd: startReveal });
-      primarySpeechTimer = setTimeout(startReveal, PRIMARY_SPEECH_BACKSTOP_MS);
+      whenSpeechReady(speechReady, card, () => {
+        const text = primaryText(card);
+        ttsService.speakOnce(text, promptLang(), { onEnd: startReveal });
+        // Backstop in case onEnd never fires (speech silently dropped).
+        primarySpeechTimer = setTimeout(startReveal, ttsService.estimateDurationMs(text));
+      });
       return;
     }
 
@@ -190,8 +194,20 @@ export function mount(container) {
     voiceResult = null;
     voiceErrorMessage = '';
     render();
-    ttsService.speakOnce(primaryText(card), promptLang(), {
-      onEnd: () => beginListening(card)
+    whenSpeechReady(speechReady, card, () => {
+      ttsService.speakOnce(primaryText(card), promptLang(), {
+        onEnd: () => beginListening(card)
+      });
+    });
+  }
+
+  function whenSpeechReady(speechReady, card, speak) {
+    if (!speechReady) {
+      speak();
+      return;
+    }
+    speechReady.then(() => {
+      if (mounted && phase === 'active' && currentCard() === card) speak();
     });
   }
 
@@ -222,7 +238,8 @@ export function mount(container) {
     ttsService.speakSequence(items, enterWindowOnce);
     // Backstop in case none of the onend callbacks fire (speech silently dropped).
     if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
-    autoAdvanceTimer = setTimeout(enterWindowOnce, TAP_AUTO_ADVANCE_BACKSTOP_MS);
+    const backstopMs = items.reduce((sum, item) => sum + ttsService.estimateDurationMs(item.text), 0);
+    autoAdvanceTimer = setTimeout(enterWindowOnce, backstopMs);
   }
 
   /**
@@ -556,6 +573,7 @@ export function mount(container) {
   render();
 
   return () => {
+    mounted = false;
     clearRevealTimer();
     clearPrimarySpeechTimer();
     if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);

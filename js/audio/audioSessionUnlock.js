@@ -19,6 +19,11 @@
 
 let audioEl = null;
 
+// Starting playback switches iOS's audio session, which can cut off speech
+// that began at the same moment — so speech waits until this has settled.
+const PLAY_SETTLE_MAX_MS = 600;
+const AFTER_PLAY_SETTLE_MS = 250;
+
 /** A ~0.1s silent WAV, built at runtime (no network request, no bundled asset). */
 function buildSilentAudioUrl() {
   const sampleRate = 8000;
@@ -53,7 +58,8 @@ export const audioSessionUnlock = {
   /**
    * Call synchronously from the same tap as toneService.unlock(), at the
    * start of an Auto-mode session. Keeps looping silently for as long as
-   * Auto mode stays mounted — see stop().
+   * Auto mode stays mounted — see stop(). Resolves (never rejects) once
+   * it's safe to start speaking.
    */
   start() {
     if (!audioEl) {
@@ -61,10 +67,12 @@ export const audioSessionUnlock = {
       audioEl.loop = true;
       audioEl.volume = 0;
     }
-    audioEl.play().catch(() => {
-      // Best-effort — if this silently fails, speechSynthesis just falls
-      // back to its normal (ambient-category, phone-speaker-only) behavior.
-    });
+    // Best-effort — if this silently fails, speechSynthesis just falls back
+    // to its normal (ambient-category, phone-speaker-only) behavior.
+    const played = audioEl.play().catch(() => {});
+    const timedOut = new Promise((resolve) => setTimeout(resolve, PLAY_SETTLE_MAX_MS));
+    return Promise.race([played, timedOut])
+      .then(() => new Promise((resolve) => setTimeout(resolve, AFTER_PLAY_SETTLE_MS)));
   },
 
   /** Call when leaving Auto mode — no reason to keep a silent loop running elsewhere. */

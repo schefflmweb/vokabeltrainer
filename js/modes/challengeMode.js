@@ -525,9 +525,45 @@ export function mount(container) {
       justPlaced && 'coaster-triangle-new'
     ].filter(Boolean).join(' ');
     return `<div class="${cls}">
-      <div class="coaster-leg left"></div>
-      <div class="coaster-leg right"></div>
+      ${coasterSvg('left')}
+      ${coasterSvg('right')}
     </div>`;
+  }
+
+  /**
+   * One coaster, drawn rather than boxed: a hand-wobbled outline, graphite
+   * hatching over a paper face, and a narrow side face for its thickness.
+   * Colours come from CSS custom properties so checkpoints and the shaded
+   * side of each pair can restyle the same drawing.
+   */
+  function coasterSvg(side) {
+    return `<svg class="coaster-leg ${side}" viewBox="0 0 22 80" preserveAspectRatio="none" aria-hidden="true">
+      <path class="coaster-side" d="M15.4 2.8 19.1 5.4 19.6 73.6 16.1 76.3Z"/>
+      <path class="coaster-face" d="M3.1 3.6 15.4 2.8 16.1 76.3 3.7 77.1Z"/>
+      <path class="coaster-shade" d="M3.1 3.6 15.4 2.8 16.1 76.3 3.7 77.1Z"/>
+      <path class="coaster-sketch" d="M4.3 7.2 4.6 72.4M5.2 3.4 14.6 2.9M4.6 76.6 15.3 75.8"/>
+    </svg>`;
+  }
+
+  /** The flat coaster bridging two triangles, drawn in the same pencil style. */
+  function plateSvg(extraClass = '') {
+    return `<svg class="tier-plate${extraClass}" viewBox="0 0 88 14" preserveAspectRatio="none" aria-hidden="true">
+      <path class="coaster-side" d="M3.4 9.4 84.6 9.1 84.2 12.4 3.8 12.7Z"/>
+      <path class="coaster-face" d="M3.4 2.2 84.6 1.9 84.6 9.1 3.4 9.4Z"/>
+      <path class="coaster-shade" d="M3.4 2.2 84.6 1.9 84.6 9.1 3.4 9.4Z"/>
+      <path class="coaster-sketch" d="M6.5 3.2 82 2.9"/>
+    </svg>`;
+  }
+
+  /** Hatching is defined once per tower and referenced by every coaster drawing. */
+  function inkDefsSvg() {
+    return `<svg class="tower-ink-defs" aria-hidden="true">
+      <defs>
+        <pattern id="coasterHatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(38)">
+          <line x1="0" y1="0" x2="0" y2="5" stroke="currentColor" stroke-width="1.1" />
+        </pattern>
+      </defs>
+    </svg>`;
   }
 
   function towerHtml(displayHeight, opts = {}) {
@@ -546,7 +582,7 @@ export function mount(container) {
         // single plate already sits there, ready for the next triangle.
         const plateCount = Math.max(1, tiers[idx + 1]?.count ?? 0);
         const plateFalls = opts.collapseAbove != null && tier.start + tier.cap - 1 >= opts.collapseAbove;
-        const plate = `<div class="tier-plate${plateFalls ? ' tier-plate-falling' : ''}"></div>`;
+        const plate = plateSvg(plateFalls ? ' tier-plate-falling' : '');
         rows += `<div class="tier-plates">${plate.repeat(plateCount)}</div>`;
       }
     });
@@ -557,6 +593,7 @@ export function mount(container) {
       : '';
     return `
       <div class="tower-wrap">
+        ${inkDefsSvg()}
         ${bestMarker}
         <div class="tower ${wobbleClass}">${rows}</div>
         <div class="tower-ground"></div>

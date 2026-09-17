@@ -1050,6 +1050,8 @@ textarea:focus {
   animation: cannonballBurst 0.5s ease-out forwards;
 }
 
+/* The tower is drawn rather than rendered as boxes: graphite ink on a paper
+   face, hatched for shading. These are the pencils the SVG coasters use. */
 .tower-wrap {
   position: relative;
   display: flex;
@@ -1057,6 +1059,24 @@ textarea:focus {
   align-items: center;
   padding-top: 22px;
   min-height: 40px;
+  width: 100%;
+  /* A sheet of sketchbook paper for the drawing to sit on: faint tooth over
+     an off-white ground. */
+  background-color: rgba(255, 255, 255, 0.55);
+  background-image: radial-gradient(rgba(58, 56, 72, 0.04) 0.5px, transparent 0.5px);
+  background-size: 3px 3px;
+  border-radius: 18px;
+  box-shadow: inset 0 0 0 1px rgba(58, 56, 72, 0.06);
+  --ink: rgba(52, 50, 66, 0.95);
+  --paper: rgba(255, 255, 255, 0.94);
+  --wash: rgba(52, 50, 66, 0.22);
+  --hatch: rgba(52, 50, 66, 0.5);
+}
+
+.tower-ink-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
 }
 
 .tower {
@@ -1114,13 +1134,7 @@ textarea:focus {
   bottom: 0;
   width: 11px;
   height: 40px;
-  border-radius: 2px;
-  background: var(--accent-gradient);
-  border: 1px solid var(--border);
-  box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.6),
-    inset -1px -1px 3px rgba(51, 47, 77, 0.16),
-    var(--shadow-sm);
+  overflow: visible;
   transform-origin: bottom center;
 }
 
@@ -1129,17 +1143,57 @@ textarea:focus {
   transform: rotate(24deg);
 }
 
-/* Light falls from the top left, so the far coaster of each pair sits in
-   its partner's shade. */
 .coaster-leg.right {
   left: 33px;
   transform: rotate(-24deg);
-  filter: brightness(0.88);
+}
+
+/* The drawing itself: paper face, graphite outline, hatched side face. */
+.coaster-face {
+  fill: var(--paper);
+  stroke: var(--ink);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.coaster-side {
+  fill: var(--wash);
+  stroke: var(--ink);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+.coaster-shade {
+  fill: url(#coasterHatch);
+  stroke: none;
+  color: var(--hatch);
+  opacity: 0.5;
+}
+
+/* The second, slightly-off stroke a pencil leaves when retracing an edge. */
+.coaster-sketch {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 0.7;
+  stroke-linecap: round;
+  opacity: 0.5;
+}
+
+/* Light falls from the top left, so the far coaster of each pair sits in
+   its partner's shade — drawn as denser hatching, not a dimmer colour. */
+.coaster-leg.right .coaster-shade {
+  opacity: 0.9;
+}
+
+.coaster-leg.right .coaster-face {
+  fill: rgba(246, 245, 248, 0.92);
 }
 
 .coaster-triangle-checkpoint .coaster-leg {
-  background: var(--success-gradient);
-  border-color: var(--success);
+  --paper: rgba(233, 250, 240, 0.95);
+  --ink: rgba(6, 96, 63, 0.8);
+  --wash: rgba(6, 96, 63, 0.18);
+  --hatch: rgba(6, 96, 63, 0.35);
 }
 
 .tier-plates {
@@ -1151,23 +1205,18 @@ textarea:focus {
 .tier-plate {
   width: 44px;
   height: 7px;
-  border-radius: 2px;
-  background: var(--accent-gradient);
-  border: 1px solid var(--border);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    inset 0 -2px 2px rgba(51, 47, 77, 0.14),
-    0 3px 5px -1px rgba(51, 47, 77, 0.28);
+  overflow: visible;
+  filter: drop-shadow(0 2px 2px rgba(51, 47, 77, 0.22));
 }
 
+/* The pencilled ground line the tower stands on. */
 .tower-ground {
-  width: 150px;
-  height: 5px;
-  background: linear-gradient(90deg, transparent, var(--text-muted) 18%, var(--text-muted) 82%, transparent);
-  opacity: 0.45;
-  border-radius: 3px;
+  width: 170px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--ink, rgba(58, 56, 72, 0.85)) 12%, var(--ink, rgba(58, 56, 72, 0.85)) 88%, transparent);
+  opacity: 0.7;
   margin-top: 2px;
-  box-shadow: 0 6px 10px -3px rgba(51, 47, 77, 0.3);
+  box-shadow: 0 4px 8px -4px rgba(58, 56, 72, 0.5);
 }
 
 .tower-height-label {
@@ -1178,7 +1227,8 @@ textarea:focus {
   position: absolute;
   left: 12%;
   right: 12%;
-  border-top: 2px dashed var(--accent);
+  border-top: 1.5px dashed var(--ink, rgba(52, 50, 66, 0.95));
+  opacity: 0.55;
 }
 
 .tower-best-line span {
@@ -1186,8 +1236,7 @@ textarea:focus {
   right: 0;
   top: -17px;
   font-size: 0.68rem;
-  color: var(--accent-text);
-  background: var(--bg);
+  color: var(--ink, rgba(52, 50, 66, 0.95));
   padding: 0 4px;
   white-space: nowrap;
 }

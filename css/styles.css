@@ -978,7 +978,9 @@ textarea:focus {
    instead of the whole block re-centring on every new coaster. */
 .tower-stage .tower-wrap {
   justify-content: flex-end;
-  min-height: 320px;
+  /* Room for the finished pyramid, so the tower grows upward from a fixed
+     ground line — capped relatively so short screens keep the button in view. */
+  min-height: min(440px, 58vh);
 }
 
 .challenge-height-line {

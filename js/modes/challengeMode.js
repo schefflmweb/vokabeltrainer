@@ -6,12 +6,19 @@ import {
   playIcon, refreshIcon, starIcon, checkCircleIcon, xCircleIcon, hourglassIcon, warningIcon
 } from '../ui/icons.js';
 
-const MAX_HEIGHT = 20;
-const CHECKPOINTS = [5, 10, 15];
-const WAGER_UNLOCK_HEIGHT = 8;
-const GOLDEN_UNLOCK_HEIGHT = 12;
-const TIMER_START_HEIGHT = 10;
-const TIMER_HARD_HEIGHT = 15;
+// A full pyramid: seven rows of triangles, from seven at the base to one at
+// the top (see TIER_CAPACITIES), which is as wide and as tall as a phone
+// screen fits. Every height point is one more triangle, so the last one
+// placed completes the tower.
+const MAX_HEIGHT = 28;
+// One per completed row — a row that's finished is what makes a real tower stable.
+const CHECKPOINTS = [7, 13, 18, 22];
+const WAGER_UNLOCK_HEIGHT = 11;
+const GOLDEN_UNLOCK_HEIGHT = 17;
+const TIMER_START_HEIGHT = 14;
+const TIMER_HARD_HEIGHT = 21;
+// From here on a plain wrong answer costs three coasters instead of two.
+const HARSH_PENALTY_HEIGHT = 21;
 const TIMER_SECONDS_MEDIUM = 15;
 // How long the answer stays coloured on the question screen before the tower page takes over.
 const REVEAL_FLASH_MS = 200;
@@ -21,10 +28,10 @@ function computeDelta(correct, height, wagerMode) {
   if (wagerMode === 'golden') return correct ? 2 : -5;
   if (wagerMode === 'double') return correct ? 2 : -3;
   if (correct) return 1;
-  return height >= 15 ? -3 : -2;
+  return height >= HARSH_PENALTY_HEIGHT ? -3 : -2;
 }
 
-/** A checkpoint at 5/10/15 is "reached" once height first exceeds it — from then on, falling back to or below it collapses the tower. 0 counts as the implicit starting checkpoint (the ground), so an early bad run before reaching height 5 can still collapse. */
+/** A checkpoint is "reached" once height first exceeds it — from then on, falling back to or below it collapses the tower. 0 counts as the implicit starting checkpoint (the ground), so an early bad run before the first checkpoint can still collapse. */
 function updateCheckpoint(lastCheckpoint, height) {
   let next = lastCheckpoint;
   for (const c of CHECKPOINTS) {
@@ -267,7 +274,7 @@ export function mount(container) {
   // next (narrower) row resting on a bridge across the row below — a stepped
   // pyramid. TIER_CAPACITIES (bottom to top) sums to exactly MAX_HEIGHT, so
   // every height point maps to one more triangle somewhere in the pyramid.
-  const TIER_CAPACITIES = [6, 5, 4, 3, 2];
+  const TIER_CAPACITIES = [7, 6, 5, 4, 3, 2, 1];
   const TRIANGLE_H = 40;
   const TIER_GAP = 4;
   const BRIDGE_H = 7;
@@ -333,7 +340,9 @@ export function mount(container) {
         rows += `<div class="tier-plates">${plate.repeat(plateCount)}</div>`;
       }
     });
-    const bestMarker = bestHeight > 0 && bestHeight <= MAX_HEIGHT
+    // Only worth drawing while it's still a target ahead — once passed, the
+    // line would just cut across the tower it's meant to celebrate.
+    const bestMarker = bestHeight > displayHeight && bestHeight <= MAX_HEIGHT
       ? `<div class="tower-best-line" style="bottom:${bestLineOffset(bestHeight)}px"><span>Bestwert ${bestHeight}</span></div>`
       : '';
     return `
@@ -349,7 +358,7 @@ export function mount(container) {
     container.innerHTML = `
       <div class="quiz-mode challenge-mode pad center-text">
         <h2>🍺 Bierdeckel-Challenge</h2>
-        <p class="hint">Jede richtige Antwort legt einen Deckel auf den Turm. Fehler lassen ihn wackeln — ab Höhe 5/10/15 ist der Stand gesichert, darunter stürzt alles ein. Hör rechtzeitig auf, um deinen Stand zu sichern!</p>
+        <p class="hint">Jede richtige Antwort legt einen Deckel auf den Turm. Fehler lassen ihn wackeln — jede fertige Reihe (Höhe ${CHECKPOINTS.join('/')}) sichert deinen Stand, darunter stürzt alles ein. Ganz oben wartet die fertige Pyramide mit ${MAX_HEIGHT} Deckeln!</p>
         <p class="hint">Aktueller Bestwert: <strong>${bestHeight}</strong></p>
         <button class="btn btn-huge mode-choice-btn btn-primary btn-with-icon" id="start-btn">
           <span class="icon-inline-wrap icon-lg">${playIcon}</span>

@@ -19,8 +19,8 @@ function shuffle(arr) {
 }
 
 function optionCountForHeight(height) {
-  if (height < 10) return 3;
-  if (height < 15) return 4;
+  if (height < 14) return 3;
+  if (height < 21) return 4;
   return 5;
 }
 
@@ -75,7 +75,7 @@ function buildWordQuestion(pot, item, pool, height) {
   const distractors = [];
 
   // Curated confusion pairs only apply to English answer options (DE→EN), and only once the challenge gets hard enough to want real discrimination instead of just recall.
-  if (isDeToEn && height >= 10) {
+  if (isDeToEn && height >= 14) {
     for (const candidate of getCuratedDistractors(item.en)) {
       if (distractors.length >= optionCount - 1) break;
       if (usedTexts.has(candidate.toLowerCase())) continue;

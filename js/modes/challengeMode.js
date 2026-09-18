@@ -7,11 +7,10 @@ import {
   playIcon, refreshIcon, starIcon, checkCircleIcon, xCircleIcon, hourglassIcon, warningIcon
 } from '../ui/icons.js';
 
-// How the tower is built, in the order a real one goes up: a row of leaning
-// triangles, then one flat coaster across each adjacent pair of them, then the
-// next (narrower) row of triangles resting on those, and so on up to a single
-// triangle at the top. Seven triangles at the base is as wide as a phone
-// screen fits.
+// The finished tower: rows of leaning triangles with flat coasters bridging
+// each adjacent pair, narrowing to a single triangle at the top. Seven
+// triangles at the base is as wide as a phone screen fits. UNITS below decides
+// the order they actually go up in.
 const TIER_CAPACITIES = [7, 6, 5, 4, 3, 2, 1];
 
 /** Every band of coasters, bottom to top — the rows the tower is laid out in. */
@@ -28,26 +27,41 @@ const plateBand = (level) => level * 2 + 1;
 /**
  * The order the coasters go up in — not row by row, but the way you'd really
  * build it: two coasters leaned into a triangle, a flat one across their top,
- * another triangle resting on that, and then the next unit started to the
- * right of it. Each later unit in a row shares its neighbour's triangle, so it
- * only needs one more. Higher up the triangles below already stand, so a unit
- * is just the flat coaster and the triangle on it.
+ * a triangle on that, and then on up as far as the tower allows, one level per
+ * round. Only when nothing more can go on top does the next base start to the
+ * right — and since a flat coaster needs two triangles under it, each new base
+ * lets the stack climb exactly one level higher than the last.
  */
 const UNITS = [];
-/** Which level (row of triangles) each unit belongs to. */
+/** The level of the highest coaster in each unit, and which climb it belongs to. */
 const UNIT_LEVELS = [];
-for (let k = 0; k < TIER_CAPACITIES[0] - 1; k++) {
-  const slots = k === 0
-    ? [{ band: 0, index: 0 }, { band: 0, index: 1 }]
-    : [{ band: 0, index: k + 1 }];
-  slots.push({ band: plateBand(0), index: k }, { band: triangleBand(1), index: k });
-  UNITS.push(slots);
-  UNIT_LEVELS.push(0);
-}
-for (let level = 1; level < TIER_CAPACITIES.length - 1; level++) {
-  for (let k = 0; k < TIER_CAPACITIES[level] - 1; k++) {
-    UNITS.push([{ band: plateBand(level), index: k }, { band: triangleBand(level + 1), index: k }]);
-    UNIT_LEVELS.push(level);
+const CLIMBS = [];
+{
+  const triangles = TIER_CAPACITIES.map(() => 0);
+  const plates = TIER_CAPACITIES.slice(0, -1).map(() => 0);
+  for (let base = 0; base < TIER_CAPACITIES[0] - 1; base++) {
+    const firstUnit = UNITS.length;
+    // A new base on the right: the first one needs two coasters, every later
+    // one leans on its neighbour and needs just one.
+    const baseSlots = [];
+    for (let n = 0; n < (base === 0 ? 2 : 1); n++) {
+      baseSlots.push({ band: triangleBand(0), index: triangles[0] });
+      triangles[0] += 1;
+    }
+    UNITS.push(baseSlots);
+    UNIT_LEVELS.push(0);
+    // Then upward while two neighbouring triangles are free to be bridged.
+    for (let level = 0; level < TIER_CAPACITIES.length - 1; level++) {
+      if (triangles[level] < plates[level] + 2) break;
+      UNITS.push([
+        { band: plateBand(level), index: plates[level] },
+        { band: triangleBand(level + 1), index: triangles[level + 1] }
+      ]);
+      UNIT_LEVELS.push(level + 1);
+      plates[level] += 1;
+      triangles[level + 1] += 1;
+    }
+    CLIMBS.push({ firstUnit, lastUnit: UNITS.length - 1 });
   }
 }
 
@@ -65,10 +79,25 @@ UNITS.forEach((slots, unitIndex) => {
 });
 
 const MAX_HEIGHT = UNIT_ENDS[UNIT_ENDS.length - 1];
-/** The height at which each level is finished — the tower's genuinely stable states. */
-const LEVEL_ENDS = UNIT_ENDS.filter((end, i) => UNIT_LEVELS[i] !== UNIT_LEVELS[i + 1]);
-// Safe points: early on every second unit, higher up each finished level.
-const CHECKPOINTS = [UNIT_ENDS[1], UNIT_ENDS[3], ...LEVEL_ENDS].filter((end) => end < MAX_HEIGHT);
+/**
+ * Safe points: a finished climb leaves the tower at rest, so that's where they
+ * sit — plus one part-way up the longer climbs, which would otherwise leave a
+ * dozen rounds without a net.
+ */
+const CHECKPOINTS = [];
+CLIMBS.forEach(({ firstUnit, lastUnit }) => {
+  const start = firstUnit === 0 ? 0 : UNIT_ENDS[firstUnit - 1];
+  const end = UNIT_ENDS[lastUnit];
+  if (end - start > 6) {
+    const middle = (start + end) / 2;
+    let nearest = null;
+    for (let u = firstUnit; u < lastUnit; u++) {
+      if (nearest === null || Math.abs(UNIT_ENDS[u] - middle) < Math.abs(nearest - middle)) nearest = UNIT_ENDS[u];
+    }
+    CHECKPOINTS.push(nearest);
+  }
+  if (end < MAX_HEIGHT) CHECKPOINTS.push(end);
+});
 const WAGER_UNLOCK_HEIGHT = 19;
 const GOLDEN_UNLOCK_HEIGHT = 30;
 const TIMER_START_HEIGHT = 24;
@@ -728,7 +757,7 @@ export function mount(container) {
     container.innerHTML = `
       <div class="quiz-mode challenge-mode pad center-text">
         <h2>🍺 Bierdeckel-Challenge</h2>
-        <p class="hint">Jede richtige Antwort legt genau einen Deckel — gebaut wird wie in echt: zwei Deckel als Dreieck, ein flacher Deckel darüber, ein Dreieck darauf, dann der nächste Abschnitt rechts daneben. Fehler lassen den Turm wackeln, jeder gesicherte Stand hält ihn — darunter stürzt alles ein. Ganz oben wartet die fertige Pyramide aus ${MAX_HEIGHT} Deckeln!</p>
+        <p class="hint">Jede richtige Antwort legt genau einen Deckel — gebaut wird wie in echt: zwei Deckel als Dreieck, ein flacher Deckel darüber, ein Dreieck darauf, und so weiter nach oben, so hoch es geht. Erst dann beginnt rechts eine neue Basis, die den Turm eine Ebene höher klettern lässt. Fehler lassen ihn wackeln, jeder gesicherte Stand hält ihn — darunter stürzt alles ein. Ganz oben wartet die fertige Pyramide aus ${MAX_HEIGHT} Deckeln!</p>
         <p class="hint">Ab Höhe ${CANNON_MIN_HEIGHT} kommen Kanonen-Fragen: Lösung eintippen statt auswählen — daneben, und die Kanone reißt einen zufälligen Abschnitt samt allem darüber weg. Ab Höhe ${WIND_MIN_HEIGHT} können Böen am obersten Abschnitt zerren.</p>
         <p class="hint">Aktueller Bestwert: <strong>${bestHeight}</strong></p>
         <button class="btn btn-huge mode-choice-btn btn-primary btn-with-icon" id="start-btn">

@@ -120,6 +120,8 @@ function heightBelowUnit(unitIndex) {
 const TIMER_SECONDS_MEDIUM = 15;
 // How long the answer stays coloured on the question screen before the tower page takes over.
 const REVEAL_FLASH_MS = 200;
+// Matches the falling animation in the stylesheet.
+const TOPPLE_MS = 700;
 const TIMER_SECONDS_HARD = 10;
 
 // Cannon rounds: no options, type the word yourself. Get it wrong and a
@@ -188,6 +190,8 @@ export function mount(container) {
   let cannonQuestion = false;
   let typedAnswer = '';
   let cannonStage = null; // 'incoming' | 'impact'
+  // The height the tower is falling back from, while its lost coasters tumble off.
+  let topplingFrom = 0;
   let cannonTargetHeight = 0;
   let cannonHandle = null;
   // Gust state
@@ -357,9 +361,32 @@ export function mount(container) {
     stackingHandle = setTimeout(() => {
       stackingHandle = null;
       if (phase !== 'revealed') return;
+      showTowerUpdate();
+    }, REVEAL_FLASH_MS);
+  }
+
+  /**
+   * Hands the screen to the tower. Coasters the answer cost are still drawn,
+   * tumbling off, before the tower settles at its new height — losing them
+   * should be as visible as placing them.
+   */
+  function showTowerUpdate(lostFrom = heightBeforeAnswer) {
+    const settled = Math.max(height, 0);
+    if (lostFrom <= settled) {
       phase = 'stacking';
       render();
-    }, REVEAL_FLASH_MS);
+      return;
+    }
+    topplingFrom = lostFrom;
+    phase = 'toppling';
+    render();
+    clearStackingTimer();
+    stackingHandle = setTimeout(() => {
+      stackingHandle = null;
+      if (phase !== 'toppling') return;
+      phase = 'stacking';
+      render();
+    }, TOPPLE_MS);
   }
 
   function useJoker() {
@@ -466,8 +493,7 @@ export function mount(container) {
         text: `Die Böe weht den obersten Abschnitt weg — ${lost} Deckel weg. Richtig wäre: ${correctAnswerText(windQuestion)}`
       };
     }
-    phase = 'stacking';
-    render();
+    showTowerUpdate();
   }
 
   function proceedAfterReveal() {
@@ -891,14 +917,20 @@ export function mount(container) {
   function renderStacking() {
     const q = currentQuestion;
     const correctAnswer = q.options[q.correctIndex];
-    const towerOpts = lastDelta > 0 ? { newAbove: heightBeforeAnswer } : {};
+    const toppling = phase === 'toppling';
+    // While toppling, the tower is still drawn at its old height with the lost
+    // coasters falling off it; it settles at the new height a moment later.
+    const displayHeight = toppling ? topplingFrom : Math.max(height, 0);
+    const towerOpts = toppling
+      ? { collapseAbove: Math.max(height, 0) }
+      : (lastDelta > 0 ? { newAbove: heightBeforeAnswer } : {});
     const note = towerEvent || {
       icon: lastCorrect ? checkCircleIcon : xCircleIcon,
       text: `${lastCorrect ? 'Richtig!' : `Richtig wäre: ${correctAnswer}`} (${lastDelta > 0 ? '+' : ''}${lastDelta})`
     };
     container.innerHTML = `
       <div class="quiz-mode challenge-mode pad center tower-stage">
-        ${towerHtml(Math.max(height, 0), towerOpts)}
+        ${towerHtml(displayHeight, towerOpts)}
         <p class="hint btn-with-icon center-text"><span class="icon-inline-wrap">${note.icon}</span> ${escapeHtml(note.text)}</p>
         ${!towerEvent && q.explanation ? `<p class="grammar-explanation">${escapeHtml(q.explanation)}</p>` : ''}
         <button class="btn btn-huge btn-compact btn-primary btn-with-icon" id="next-btn">Weiter <span class="icon-inline-wrap">${playIcon}</span></button>
@@ -1018,7 +1050,7 @@ export function mount(container) {
     if (phase === 'loading') return renderLoading();
     if (phase === 'active') return renderQuestion(false);
     if (phase === 'revealed') return renderQuestion(true);
-    if (phase === 'stacking') return renderStacking();
+    if (phase === 'stacking' || phase === 'toppling') return renderStacking();
     if (phase === 'cannon') return renderCannon();
     if (phase === 'wind') return renderWind();
     if (phase === 'collapsing') return renderCollapsing();

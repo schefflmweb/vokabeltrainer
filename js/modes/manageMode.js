@@ -607,12 +607,15 @@ export function mount(container) {
       if (voices.length === 0) return `<option value="">Wird geladen …</option>`;
       const preferred = ttsService.getPreferredVoiceName(langPrefix);
       const selectedName = preferred && voices.some((v) => v.name === preferred) ? preferred : voices[0].name;
-      return voices.map((v) => `<option value="${escapeHtml(v.name)}" ${v.name === selectedName ? 'selected' : ''}>${escapeHtml(v.name)} (${escapeHtml(v.lang)})</option>`).join('');
+      return voices.map((v) => {
+        const origin = ttsService.runsOnDevice(v) ? 'auf dem Gerät' : 'aus dem Netz';
+        return `<option value="${escapeHtml(v.name)}" ${v.name === selectedName ? 'selected' : ''}>${escapeHtml(v.name)} (${escapeHtml(v.lang)}) · ${origin}</option>`;
+      }).join('');
     };
 
     box.innerHTML = `
       <h3><span class="icon-inline-wrap">${speakerIcon}</span> Vorlese-Stimme</h3>
-      <p class="hint">Gilt fürs Vorlesen im Auto-Modus, falls dein Gerät mehrere Stimmen anbietet.</p>
+      <p class="hint">Gilt fürs Vorlesen im Auto-Modus, falls dein Gerät mehrere Stimmen anbietet. Stimmen „auf dem Gerät“ sprechen sofort und funktionieren ohne Netz — Netz-Stimmen können unterwegs verzögert starten oder stumm bleiben.</p>
       <div class="voice-row">
         <span class="voice-row-label">Englisch</span>
         <select class="voice-select" id="voice-select-en">${voiceOptionsHtml('en')}</select>

@@ -49,8 +49,15 @@ function setPreferredVoiceName(langPrefix, name) {
   }
 }
 
+/** True unless the engine says the voice is synthesised somewhere else (iOS lists plenty of those). */
+const runsOnDevice = (voice) => voice.localService !== false;
+
 function voicesFor(langPrefix) {
-  return voicesCache.filter((v) => v.lang?.toLowerCase().startsWith(langPrefix));
+  const matching = voicesCache.filter((v) => v.lang?.toLowerCase().startsWith(langPrefix));
+  // On-device voices speak instantly and work offline. Network voices can take
+  // seconds to start, or stay silent altogether on a weak connection — which
+  // is exactly where this app gets used — so they go last.
+  return matching.sort((a, b) => Number(runsOnDevice(b)) - Number(runsOnDevice(a)));
 }
 
 function pickVoice(langPrefix) {
@@ -74,25 +81,50 @@ let generation = 0;
 // as cancel(). Only cancel when something is actually playing, and then give
 // the engine a moment before speaking again.
 const AFTER_CANCEL_DELAY_MS = 80;
+// Safari accepts an utterance and then sometimes stays silent — typically with
+// a voice that isn't on the device. If speaking hasn't begun by now, and the
+// engine isn't busy with it either, the utterance is dropped and retried with
+// whatever voice the system picks itself. Generous, because the first
+// utterance after a pause can take a moment to warm up, and cutting off
+// speech that was about to play would be worse than waiting.
+const SPEECH_START_TIMEOUT_MS = 1400;
 
-function speakOne(text, langPrefix, { rate, gen, onDone } = {}) {
+function speakOne(text, langPrefix, { rate, gen, onDone, useDefaultVoice } = {}) {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = langPrefix === 'en' ? 'en-US' : 'de-DE';
   utterance.rate = rate || 0.95;
-  const voice = pickVoice(langPrefix);
+  const voice = useDefaultVoice ? null : pickVoice(langPrefix);
   if (voice) utterance.voice = voice;
+
   let settled = false;
+  let replaced = false;
+  let startWatch = null;
   const finish = () => {
     if (settled) return;
     settled = true;
+    clearTimeout(startWatch);
     liveUtterances.delete(utterance);
-    if (gen === generation) onDone?.();
+    if (!replaced && gen === generation) onDone?.();
   };
+  utterance.onstart = () => clearTimeout(startWatch);
   // Safari reports some failures only via onerror, never onend.
   utterance.onend = finish;
   utterance.onerror = finish;
   liveUtterances.add(utterance);
   speechSynthesis.speak(utterance);
+  // A queue that has been idle can need a nudge before it plays anything.
+  speechSynthesis.resume();
+
+  if (!useDefaultVoice) {
+    startWatch = setTimeout(() => {
+      // speaking means the engine has it in hand — leave it alone rather than
+      // risk cutting off a voice that is simply slow to get going.
+      if (settled || gen !== generation || speechSynthesis.speaking) return;
+      replaced = true;
+      speechSynthesis.cancel();
+      speakOne(text, langPrefix, { rate, gen, onDone, useDefaultVoice: true });
+    }, SPEECH_START_TIMEOUT_MS);
+  }
   return utterance;
 }
 
@@ -211,10 +243,12 @@ export const ttsService = {
     return typeof window !== 'undefined' && 'speechSynthesis' in window;
   },
 
-  /** All voices the device offers for a language ('en' or 'de'), for a voice picker. */
+  /** All voices the device offers for a language ('en' or 'de'), on-device ones first, for a voice picker. */
   listVoices(langPrefix) {
     return voicesFor(langPrefix);
   },
+
+  runsOnDevice,
 
   getPreferredVoiceName,
   setPreferredVoiceName,

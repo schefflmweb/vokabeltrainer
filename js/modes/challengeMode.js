@@ -641,13 +641,17 @@ export function mount(container) {
     </g>`;
   }
 
-  /** The flat coaster bridging two triangles: a sliver of its top surface, and its edge below. */
+  /**
+   * The flat coaster bridging two triangles: a sliver of its top surface, and
+   * its edge below. Drawn a little wider than the gap between two apexes so it
+   * visibly lies across them instead of ending exactly on them.
+   */
   function plateSvg(extraClass = '') {
-    return `<svg class="tier-plate${extraClass}" viewBox="0 0 44 5" preserveAspectRatio="none" aria-hidden="true">
-      <path class="coaster-face" d="M4.2 0.7 42.6 0.6 40.1 2.3 1.7 2.4Z"/>
-      <path class="coaster-shade" d="M4.2 0.7 42.6 0.6 40.1 2.3 1.7 2.4Z"/>
-      <path class="coaster-edge" d="M1.7 2.4 40.1 2.3 40.2 3.7 1.8 3.8Z"/>
-      <path class="coaster-sketch" d="M3.4 2.9 38.6 2.8"/>
+    return `<svg class="tier-plate${extraClass}" viewBox="0 0 48 5" preserveAspectRatio="none" aria-hidden="true">
+      <path class="coaster-face" d="M4.6 0.7 46.5 0.6 43.7 2.3 1.9 2.4Z"/>
+      <path class="coaster-shade" d="M4.6 0.7 46.5 0.6 43.7 2.3 1.9 2.4Z"/>
+      <path class="coaster-edge" d="M1.9 2.4 43.7 2.3 43.8 3.7 2 3.8Z"/>
+      <path class="coaster-sketch" d="M3.7 2.9 42.1 2.8"/>
     </svg>`;
   }
 

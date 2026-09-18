@@ -1113,7 +1113,9 @@ textarea:focus {
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  gap: 3px;
+  /* Shoulder to shoulder, so the coaster bridging two apexes reaches across
+     both of them (see .tier-plate). */
+  gap: 0;
 }
 
 .coaster-triangle {
@@ -1262,13 +1264,18 @@ textarea:focus {
 .tier-plates {
   display: flex;
   justify-content: center;
-  gap: 3px;
+  gap: 0;
   /* Seats the flat coasters onto the apexes they bridge. */
   margin: -1px 0 -3px;
 }
 
+/* Wider than the 44px from one apex to the next, with the overhang taken back
+   out as margin: that keeps every plate centred over the pair it bridges while
+   letting its ends rest across both peaks. Neighbouring plates overlap by that
+   much, which is what really happens — they share the apex between them. */
 .tier-plate {
-  width: 44px;
+  width: 48px;
+  margin: 0 -2px;
   height: 5px;
   overflow: visible;
   filter: drop-shadow(0 2px 2px rgba(51, 47, 77, 0.22));

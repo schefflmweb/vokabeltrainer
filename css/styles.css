@@ -971,6 +971,76 @@ textarea:focus {
   color: var(--accent-text);
 }
 
+/* --- Worttyp- und Kategorie-Auswahl --- */
+
+.practice-filter {
+  width: 100%;
+  text-align: left;
+}
+
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.practice-filter.is-active .filter-toggle {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.2);
+}
+
+.filter-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.filter-caret {
+  color: var(--text-muted);
+}
+
+.filter-panel {
+  padding: 10px 4px 4px;
+}
+
+.filter-panel .hint {
+  margin: 10px 0 6px;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.filter-chip.active {
+  background: var(--accent-gradient);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
 /* --- Bierdeckel-Challenge --- */
 
 /* The tower page reserves room for a full-height tower and keeps the ground

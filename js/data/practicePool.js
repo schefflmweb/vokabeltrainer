@@ -1,5 +1,6 @@
 import { vocabStore } from './vocabStore.js';
 import { idiomStore } from './idiomStore.js';
+import { practiceFilter } from './practiceFilter.js';
 
 /**
  * Auto/Quiz mode can practice vocab, idioms, or both mixed together. This
@@ -30,21 +31,48 @@ export function isVocabCard(card) {
   return card.__store === vocabStore;
 }
 
+/** The chosen word types/categories, or null while nothing is picked (= practise everything). */
+function activeFilter() {
+  return practiceFilter.isActive() ? practiceFilter.get() : null;
+}
+
 export async function getDueFromSource(source, limit, now = Date.now()) {
   const stores = storesFor(source);
+  const filter = activeFilter();
   if (stores.length === 1) {
-    return tag(await stores[0].getDue(limit, now), stores[0]);
+    return tag(await stores[0].getDue(limit, now, filter), stores[0]);
   }
-  const lists = await Promise.all(stores.map((s) => s.getDue(limit, now).then((items) => tag(items, s))));
+  const lists = await Promise.all(stores.map((s) => s.getDue(limit, now, filter).then((items) => tag(items, s))));
   const merged = lists.flat();
   return [...merged].sort(() => Math.random() - 0.5).slice(0, limit);
 }
 
-export async function getSampleFromSource(source, cap) {
+async function getSampleFromSource(source, cap) {
   const stores = storesFor(source);
+  const filter = activeFilter();
   if (stores.length === 1) {
-    return tag(await stores[0].getSample(cap), stores[0]);
+    return tag(await stores[0].getSample(cap, filter), stores[0]);
   }
-  const lists = await Promise.all(stores.map((s) => s.getSample(Math.ceil(cap / stores.length)).then((items) => tag(items, s))));
+  const lists = await Promise.all(stores.map((s) => s.getSample(Math.ceil(cap / stores.length), filter).then((items) => tag(items, s))));
   return lists.flat();
+}
+
+/**
+ * A pool to draw multiple-choice distractors from. The word type/category
+ * selection says what to *practise*, not which words may show up as wrong
+ * options — and a narrow selection (say "Interjection" plus one category)
+ * can hold fewer words than a question needs options, which would leave a
+ * question with a single, unmissable answer. So a pool that thin gets
+ * topped up from the unfiltered collection.
+ */
+export async function getDistractorSample(source, cap, minimum = 4) {
+  const filtered = await getSampleFromSource(source, cap);
+  if (filtered.length >= minimum) return filtered;
+  const stores = storesFor(source);
+  const lists = await Promise.all(
+    stores.map((s) => s.getSample(Math.ceil(cap / stores.length)).then((items) => tag(items, s)))
+  );
+  const keyOf = (card) => `${isVocabCard(card) ? 'v' : 'i'}:${card.id}`;
+  const seen = new Set(filtered.map(keyOf));
+  return [...filtered, ...lists.flat().filter((card) => !seen.has(keyOf(card)))];
 }

@@ -5,6 +5,7 @@ import { speechInputService } from '../stt/speechInputService.js';
 import { toneService } from '../audio/toneService.js';
 import { audioSessionUnlock } from '../audio/audioSessionUnlock.js';
 import { progressBarHtml } from '../ui/progressBar.js';
+import { mountPracticeFilter } from '../ui/practiceFilterBox.js';
 import { flagGB, flagDE } from '../ui/flags.js';
 import {
   playIcon, pauseIcon, tapIcon, micIcon, warningIcon, hourglassIcon, refreshIcon, starIcon,
@@ -439,12 +440,19 @@ export function mount(container) {
         ${voiceSupported ? '' : '<p class="hint">Spracheingabe wird von diesem Browser nicht unterstützt.</p>'}
         ${interactionMode === 'voice' ? `<p class="hint"><span class="icon-inline-wrap">${warningIcon}</span> Funktioniert nur, wenn die Seite direkt in Safari geöffnet ist (nicht das installierte Icon vom Home-Bildschirm).</p>` : ''}
 
+        <p class="hint">Auswahl</p>
+        <div id="practice-filter-host"></div>
+
         <p class="hint">Auto-Modus: pro Karte ein großer Tap. Kein Hinsehen nötig.</p>
         <button class="btn btn-huge mode-choice-btn btn-primary btn-with-icon" id="start-btn" ${ready ? '' : 'disabled'}>
           <span class="icon-inline-wrap icon-lg">${ready ? playIcon : hourglassIcon}</span>
           <span>${ready ? "Los geht's" : 'Lädt …'}</span>
         </button>
       </div>`;
+    mountPracticeFilter(container.querySelector('#practice-filter-host'), {
+      // The prefetched round was drawn under the old selection.
+      onChange: () => prefetchQueue()
+    });
     container.querySelectorAll('[data-source]').forEach((btn) => {
       btn.addEventListener('click', () => setSource(btn.dataset.source));
     });

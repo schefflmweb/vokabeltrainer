@@ -1,5 +1,5 @@
 const DB_NAME = 'vokabeltrainer';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const STORE_VOCAB = 'vocab';
 const STORE_META = 'meta';
 const STORE_GRAMMAR = 'grammar';
@@ -40,6 +40,14 @@ function openDb() {
         store.createIndex('dueDate', 'srs.dueDate', { unique: false });
         store.createIndex('dirty', 'dirty', { unique: false });
         store.createIndex('category', 'category', { unique: false });
+      }
+      // v4: a word-type index next to the existing category one, so practising
+      // a chosen type or category can read just those records. Without it a
+      // narrow pick (a few dozen interjections among thousands of words) would
+      // have to scan the store to find anything at all.
+      for (const name of [STORE_VOCAB, STORE_IDIOMS]) {
+        const store = req.transaction.objectStore(name);
+        if (!store.indexNames.contains('type')) store.createIndex('type', 'type', { unique: false });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -164,6 +172,56 @@ export const db = {
       };
       req.onerror = () => reject(req.error);
     });
+  },
+
+  /**
+   * Up to `cap` records matching a {types, categories} filter. Reads through
+   * whichever of the two indexes has fewer values picked — that one narrows
+   * the store the most — and checks the other dimension on the records that
+   * come back.
+   */
+  async filteredPool(storeName, filter, cap) {
+    const byType = filter.types?.length ? { index: 'type', values: filter.types } : null;
+    const byCategory = filter.categories?.length ? { index: 'category', values: filter.categories } : null;
+    const driver = byType && byCategory
+      ? (byType.values.length <= byCategory.values.length ? byType : byCategory)
+      : (byType || byCategory);
+    if (!driver) return this.samplePool(storeName, cap);
+    const pool = await this.queryIndexAny(storeName, driver.index, driver.values, cap);
+    return pool.filter((r) => {
+      if (byType && !byType.values.includes(r.type)) return false;
+      if (byCategory && !byCategory.values.includes(r.category)) return false;
+      return true;
+    });
+  },
+
+  /** Every distinct value an index holds, read straight from the index rather than from the records. */
+  async distinctIndexValues(storeName, indexName) {
+    const store = await tx(storeName, 'readonly');
+    const index = store.index(indexName);
+    return new Promise((resolve, reject) => {
+      const values = [];
+      const req = index.openKeyCursor(null, 'nextunique');
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (!cursor) {
+          resolve(values);
+          return;
+        }
+        values.push(cursor.key);
+        cursor.continue();
+      };
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  /** Up to `cap` records whose index key is any of `values` — the union, shuffled together. */
+  async queryIndexAny(storeName, indexName, values, cap) {
+    const perValue = Math.max(1, Math.ceil(cap / values.length));
+    const lists = await Promise.all(
+      values.map((v) => this.queryIndex(storeName, indexName, IDBKeyRange.only(v), perValue))
+    );
+    return lists.flat().sort(() => Math.random() - 0.5).slice(0, cap);
   },
 
   async getMeta(key) {

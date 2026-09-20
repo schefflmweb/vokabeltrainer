@@ -41,13 +41,25 @@ export const vocabStore = {
     return db.get(id);
   },
 
-  /** A random subset, for callers that just need "a bunch of other words" (e.g. multiple-choice distractors) without loading the whole collection. */
-  async getSample(cap = 150) {
-    const pool = await db.samplePool(STORE_NAMES.VOCAB, cap);
+  /** A random subset, for callers that just need "a bunch of other words" (e.g. multiple-choice distractors) without loading the whole collection. `filter` restricts it to chosen word types/categories. */
+  async getSample(cap = 150, filter = null) {
+    const pool = filter
+      ? await db.filteredPool(STORE_NAMES.VOCAB, filter, cap)
+      : await db.samplePool(STORE_NAMES.VOCAB, cap);
     return pool.filter((v) => !v.deleted);
   },
 
-  async getDue(limit = 20, now = Date.now()) {
+  async getDue(limit = 20, now = Date.now(), filter = null) {
+    // A filtered session reads by type/category index instead of by due date:
+    // the chosen slice can be a tiny part of the collection, and a due-date
+    // window would mostly come back with words the filter then throws away.
+    // Due ones are still preferred, just picked out in memory.
+    if (filter) {
+      const pool = (await db.filteredPool(STORE_NAMES.VOCAB, filter, DUE_POOL_CAP)).filter((v) => !v.deleted);
+      const due = pool.filter((v) => (v.srs?.dueDate ?? 0) <= now);
+      const base = due.length > 0 ? due : pool;
+      return [...base].sort(() => Math.random() - 0.5).slice(0, limit);
+    }
     // Reads via the dueDate index instead of the whole store — with a large
     // collection, loading every record just to find ~15 due ones made every
     // session start slow.

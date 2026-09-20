@@ -1,6 +1,7 @@
 import { vocabStore } from './vocabStore.js';
 import { idiomStore } from './idiomStore.js';
 import { grammarStore } from './grammarStore.js';
+import { practiceFilter } from './practiceFilter.js';
 import { getCuratedDistractors } from './distractorPairs.js';
 
 /**
@@ -25,10 +26,13 @@ function optionCountForHeight(height) {
 }
 
 async function fetchPotSamples() {
+  const filter = practiceFilter.isActive() ? practiceFilter.get() : null;
   const [vocab, idiom, grammar] = await Promise.all([
-    vocabStore.getSample(SAMPLE_CAP),
-    idiomStore.getSample(SAMPLE_CAP),
-    grammarStore.getSample(SAMPLE_CAP)
+    vocabStore.getSample(SAMPLE_CAP, filter),
+    idiomStore.getSample(SAMPLE_CAP, filter),
+    // Grammar exercises carry neither a word type nor a category, so once
+    // either is picked they can't satisfy it — the pot sits out that round.
+    filter ? Promise.resolve([]) : grammarStore.getSample(SAMPLE_CAP)
   ]);
   return { vocab, idiom, grammar };
 }
@@ -125,6 +129,19 @@ function buildGrammarQuestion(item) {
   };
 }
 
+/**
+ * The picked word always comes from the chosen types/categories, but its
+ * wrong options may not have to: a selection narrower than the option
+ * count would otherwise leave a question with no wrong answer at all.
+ */
+async function topUpPool(pot, pool, needed) {
+  if (pool.length >= needed) return pool;
+  const store = pot === 'vocab' ? vocabStore : idiomStore;
+  const extra = await store.getSample(SAMPLE_CAP);
+  const seen = new Set(pool.map((item) => item.id));
+  return [...pool, ...extra.filter((item) => !seen.has(item.id))];
+}
+
 /** Resolves a fresh challenge question, or null if there's nothing in any of the three pots to draw from. */
 export async function getNextQuestion(height) {
   const samples = await fetchPotSamples();
@@ -134,7 +151,8 @@ export async function getNextQuestion(height) {
     const item = samples.grammar[Math.floor(Math.random() * samples.grammar.length)];
     return buildGrammarQuestion(item);
   }
-  const pool = samples[pot];
-  const item = pool[Math.floor(Math.random() * pool.length)];
+  const picked = samples[pot];
+  const item = picked[Math.floor(Math.random() * picked.length)];
+  const pool = await topUpPool(pot, picked, optionCountForHeight(height));
   return buildWordQuestion(pot, item, pool, height);
 }

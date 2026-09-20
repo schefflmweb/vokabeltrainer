@@ -46,13 +46,23 @@ export const idiomStore = {
     return db.get(id, STORE);
   },
 
-  /** A random subset, for callers that just need "a bunch of other idioms" (e.g. multiple-choice distractors) without loading the whole collection. */
-  async getSample(cap = 150) {
-    const pool = await db.samplePool(STORE, cap);
+  /** A random subset, for callers that just need "a bunch of other idioms" (e.g. multiple-choice distractors) without loading the whole collection. `filter` restricts it to chosen word types/categories. */
+  async getSample(cap = 150, filter = null) {
+    const pool = filter
+      ? await db.filteredPool(STORE, filter, cap)
+      : await db.samplePool(STORE, cap);
     return pool.filter((v) => !v.deleted);
   },
 
-  async getDue(limit = 20, now = Date.now()) {
+  async getDue(limit = 20, now = Date.now(), filter = null) {
+    // Same reasoning as vocabStore.getDue: a filtered session reads by
+    // type/category and picks the due ones out of that.
+    if (filter) {
+      const pool = (await db.filteredPool(STORE, filter, DUE_POOL_CAP)).filter((v) => !v.deleted);
+      const due = pool.filter((v) => (v.srs?.dueDate ?? 0) <= now);
+      const base = due.length > 0 ? due : pool;
+      return [...base].sort(() => Math.random() - 0.5).slice(0, limit);
+    }
     let pool = (await db.queryIndex(STORE, 'dueDate', IDBKeyRange.upperBound(now), DUE_POOL_CAP))
       .filter((v) => !v.deleted);
     if (pool.length === 0) {

@@ -88,6 +88,12 @@ export const skipIcon = icon(`
   <path d="M18 5v14"/>
 `);
 
+export const filterIcon = icon(`
+  <path d="M4 6h16"/>
+  <path d="M7 12h10"/>
+  <path d="M10 18h4"/>
+`);
+
 export const trashIcon = icon(`
   <path d="M4 7h16"/>
   <path d="M9 7V4.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V7"/>

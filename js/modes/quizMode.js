@@ -1,7 +1,8 @@
 import { syncService } from '../data/syncService.js';
-import { PRACTICE_SOURCES, getDueFromSource, getSampleFromSource, isVocabCard } from '../data/practicePool.js';
+import { PRACTICE_SOURCES, getDueFromSource, getDistractorSample, isVocabCard } from '../data/practicePool.js';
 import { ttsService } from '../tts/ttsService.js';
 import { progressBarHtml } from '../ui/progressBar.js';
+import { mountPracticeFilter } from '../ui/practiceFilterBox.js';
 import { flagGB, flagDE } from '../ui/flags.js';
 import { checklistIcon, keyboardIcon, speakerIcon, thinkingIcon, starIcon, refreshIcon, checkCircleIcon, xCircleIcon, playIcon } from '../ui/icons.js';
 import { answersMatch } from '../util/answerMatch.js';
@@ -127,7 +128,7 @@ export function mount(container) {
       return;
     }
 
-    distractorSample = await getSampleFromSource(source, 150); // enough variety for multiple-choice distractors without loading the whole collection
+    distractorSample = await getDistractorSample(source, 150); // enough variety for multiple-choice distractors without loading the whole collection
     queue = await getDueFromSource(source, SESSION_SIZE);
     index = 0;
     phase = queue.length > 0 ? 'active' : 'empty';
@@ -178,6 +179,9 @@ export function mount(container) {
           <button class="btn toggle-btn ${direction === 'de-en' ? 'active' : ''}" id="dir-de-en">${flagDE} → ${flagGB} Deutsch → Englisch</button>
         </div>
 
+        <p class="hint">Auswahl</p>
+        <div id="practice-filter-host"></div>
+
         <p class="hint">Wie möchtest du üben?</p>
         <button class="btn btn-huge mode-choice-btn btn-primary btn-with-icon" id="start-choice">
           <span class="icon-inline-wrap icon-lg">${checklistIcon}</span>
@@ -192,6 +196,10 @@ export function mount(container) {
           <span>Zuhören<span class="hint">${rtReady ? 'Anhören, dann bewerten' : 'Lädt …'}</span></span>
         </button>
       </div>`;
+    mountPracticeFilter(container.querySelector('#practice-filter-host'), {
+      // The prefetched "Zuhören" round was drawn under the old selection.
+      onChange: () => prefetchQueue()
+    });
     container.querySelectorAll('[data-source]').forEach((btn) => {
       btn.addEventListener('click', () => setSource(btn.dataset.source));
     });

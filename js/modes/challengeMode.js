@@ -2,6 +2,7 @@ import { getNextQuestion } from '../data/challengeQuestions.js';
 import { challengeStore } from '../data/challengeStore.js';
 import { toneService } from '../audio/toneService.js';
 import { progressBarHtml } from '../ui/progressBar.js';
+import { mountPracticeFilter } from '../ui/practiceFilterBox.js';
 import { answersMatch } from '../util/answerMatch.js';
 import {
   playIcon, refreshIcon, starIcon, checkCircleIcon, xCircleIcon, hourglassIcon, warningIcon
@@ -789,12 +790,15 @@ export function mount(container) {
         <h2>🍺 Bierdeckel-Challenge</h2>
         <p class="hint">Jede richtige Antwort legt genau einen Deckel — gebaut wird wie in echt: zwei Deckel als Dreieck, ein flacher Deckel darüber, ein Dreieck darauf, und so weiter nach oben, so hoch es geht. Erst dann beginnt rechts eine neue Basis, die den Turm eine Ebene höher klettern lässt. Fehler lassen ihn wackeln, jeder gesicherte Stand hält ihn — darunter stürzt alles ein. Ganz oben wartet die fertige Pyramide aus ${MAX_HEIGHT} Deckeln!</p>
         <p class="hint">Ab Höhe ${CANNON_MIN_HEIGHT} kommen Kanonen-Fragen: Lösung eintippen statt auswählen — daneben, und die Kanone reißt einen zufälligen Abschnitt samt allem darüber weg. Ab Höhe ${WIND_MIN_HEIGHT} können Böen am obersten Abschnitt zerren.</p>
+        <p class="hint">Auswahl</p>
+        <div id="practice-filter-host"></div>
         <p class="hint">Aktueller Bestwert: <strong>${bestHeight}</strong></p>
         <button class="btn btn-huge mode-choice-btn btn-primary btn-with-icon" id="start-btn">
           <span class="icon-inline-wrap icon-lg">${playIcon}</span>
           <span>Challenge starten</span>
         </button>
       </div>`;
+    mountPracticeFilter(container.querySelector('#practice-filter-host'), { onChange: () => render() });
     container.querySelector('#start-btn').addEventListener('click', startSession);
   }
 

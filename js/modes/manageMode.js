@@ -4,8 +4,9 @@ import { idiomStore } from '../data/idiomStore.js';
 import { parseCsv, toCsv, parseGrammarCsv, grammarToCsv } from '../csv/csvImport.js';
 import { firebaseAuth, authErrorMessage } from '../auth/firebaseAuth.js';
 import { syncService } from '../data/syncService.js';
+import { deviceRole } from '../data/deviceRole.js';
 import { ttsService } from '../tts/ttsService.js';
-import { trashIcon, searchIcon, editIcon, checkCircleIcon, xCircleIcon, downloadIcon, chartIcon, flameIcon, speakerIcon, bookIcon, quoteIcon } from '../ui/icons.js';
+import { trashIcon, searchIcon, editIcon, checkCircleIcon, xCircleIcon, downloadIcon, chartIcon, flameIcon, speakerIcon, bookIcon, quoteIcon, checklistIcon } from '../ui/icons.js';
 import { APP_VERSION } from '../version.js';
 
 const VOICE_SAMPLES = { en: 'This is what I sound like.', de: 'So höre ich mich an.' };
@@ -45,7 +46,7 @@ const VOCAB_PAGE_SIZE = 150;
  * opening/searching "Verwalten" very slow. A "Mehr anzeigen" button reveals
  * more in pages instead.
  */
-function renderVocabRowsHtml(list, editingId, visibleCount) {
+function renderVocabRowsHtml(list, editingId, visibleCount, canEdit) {
   if (list.length === 0) {
     return `<p class="hint">Keine Treffer.</p>`;
   }
@@ -61,10 +62,10 @@ function renderVocabRowsHtml(list, editingId, visibleCount) {
       ${byCategory[cat].map((v) => v.id === editingId ? renderEditRowHtml(v) : `
         <div class="vocab-row" data-id="${v.id}">
           <span>${escapeHtml(v.en)} – ${escapeHtml(v.de)}${v.type ? ` <span class="word-type-badge">${escapeHtml(v.type)}</span>` : ''}</span>
-          <span class="row-actions">
+          ${canEdit ? `<span class="row-actions">
             <button class="btn btn-icon edit-btn" data-id="${v.id}" aria-label="Bearbeiten"><span class="icon-inline-wrap">${editIcon}</span></button>
             <button class="btn btn-icon delete-btn" data-id="${v.id}" aria-label="Löschen"><span class="icon-inline-wrap">${trashIcon}</span></button>
-          </span>
+          </span>` : ''}
         </div>
       `).join('')}
     </div>
@@ -150,7 +151,7 @@ export function mount(container) {
     if (newQuery !== searchQuery) visibleCount = VOCAB_PAGE_SIZE; // fresh search — start paging from the top again
     searchQuery = newQuery;
     const filtered = filterVocab(vocabCache, searchQuery);
-    listEl.innerHTML = renderVocabRowsHtml(filtered, editingId, visibleCount);
+    listEl.innerHTML = renderVocabRowsHtml(filtered, editingId, visibleCount, deviceRole.isMaster());
     bindRowActions(listEl);
     const countEl = container.querySelector('#vocab-count');
     if (countEl) countEl.textContent = filtered.length;
@@ -265,7 +266,10 @@ export function mount(container) {
     const dueToday = vocabCache.filter((v) => v.srs.dueDate <= now).length;
     const learned = vocabCache.filter((v) => v.srs.repetitions >= 2).length;
     const streak = await vocabStore.getStreak();
-    const deletedCount = await vocabStore.getDeletedCount();
+    // Master data is only editable on the master device (see deviceRole.js) —
+    // everything that would change or delete a record is left out entirely on
+    // a reader rather than shown and then refused.
+    const isMaster = deviceRole.isMaster();
 
     container.innerHTML = `
       <div class="manage-mode pad">
@@ -291,17 +295,13 @@ export function mount(container) {
           </div>
         </section>
 
-        ${deletedCount > 0 ? `
-        <section class="account-box">
-          <h3><span class="icon-inline-wrap">${trashIcon}</span> Als gelöscht markierte Vokabeln gefunden</h3>
-          <p class="hint">${deletedCount} Vokabeln sind lokal als gelöscht markiert, aber nicht wirklich entfernt (z. B. durch "Alle Vokabeln löschen"). Falls das unabsichtlich war, kannst du sie hier wiederherstellen.</p>
-          <button class="btn btn-primary btn-with-icon" id="restore-deleted-btn"><span class="icon-inline-wrap">${checkCircleIcon}</span> ${deletedCount} Vokabeln wiederherstellen</button>
-        </section>` : ''}
+        <section class="account-box" id="device-role-box"></section>
 
         <section class="account-box" id="account-box"></section>
 
         <section class="voice-box" id="voice-box"></section>
 
+        ${isMaster ? `
         <section>
           <h3>Neue Vokabel</h3>
           <form id="add-form" class="add-form">
@@ -313,15 +313,16 @@ export function mount(container) {
             <button type="submit" class="btn btn-primary">Hinzufügen</button>
           </form>
           ${wortartDatalistHtml()}
-        </section>
+        </section>` : ''}
 
         <section>
-          <h3>CSV-Import &amp; Export</h3>
+          <h3>CSV-${isMaster ? 'Import &amp; Export' : 'Export'}</h3>
+          ${isMaster ? `
           <p class="hint">Spalten: Englisch, Deutsch, Kategorie (optional), Beispiel (optional), Wortart (optional)</p>
           <input type="file" id="csv-file" accept=".csv,text/csv" />
           <textarea id="csv-text" rows="4" placeholder="cat,Katze&#10;dog,Hund"></textarea>
           <button class="btn btn-secondary" id="csv-import-btn">Importieren</button>
-          <p id="csv-status" class="hint">${escapeHtml(csvStatusMessage)}</p>
+          <p id="csv-status" class="hint">${escapeHtml(csvStatusMessage)}</p>` : ''}
           <button class="btn btn-secondary btn-with-icon" id="csv-export-btn"><span class="icon-inline-wrap">${downloadIcon}</span> Als CSV exportieren</button>
         </section>
 
@@ -331,47 +332,45 @@ export function mount(container) {
             <span class="icon-inline-wrap search-icon">${searchIcon}</span>
             <input type="text" id="vocab-search" class="search-input" placeholder="Suchen (Englisch oder Deutsch) …" value="${escapeHtml(searchQuery)}" />
           </div>
-          <div class="vocab-list" id="vocab-list-container">${renderVocabRowsHtml(filtered, editingId, visibleCount)}</div>
+          <div class="vocab-list" id="vocab-list-container">${renderVocabRowsHtml(filtered, editingId, visibleCount, isMaster)}</div>
         </section>
 
+        ${isMaster ? `
         <section>
           <h3>Alle Vokabeln löschen</h3>
-          <p class="hint">Löscht deine komplette Vokabelliste unwiderruflich (inkl. Lernfortschritt) — z. B. um danach nur eine eigene CSV frisch zu importieren. Gilt wie jede andere Änderung auch für den Sync: Die Löschung wird zu allen verbundenen Geräten übertragen, sobald sie das nächste Mal synchronisieren.</p>
-          <button class="btn btn-danger btn-with-icon" id="delete-all-btn"><span class="icon-inline-wrap">${trashIcon}</span> Alle Vokabeln löschen</button>
-        </section>
+          <p class="hint">Löscht deine komplette Vokabelliste unwiderruflich — lokal <strong>und in der Cloud</strong>, inklusive Lernfortschritt. Es bleibt nichts zum Wiederherstellen übrig. Die anderen Geräte leeren ihre Liste ebenfalls, sobald sie das nächste Mal synchronisieren.</p>
+          <button class="btn btn-danger btn-with-icon" id="delete-all-btn"><span class="icon-inline-wrap">${trashIcon}</span> Alle Vokabeln löschen (lokal + Cloud)</button>
+        </section>` : ''}
 
         <section>
           <h3><span class="icon-inline-wrap">${bookIcon}</span> Grammatik (<span id="grammar-count">${grammarCount}</span>)</h3>
+          ${isMaster ? `
           <p class="hint">Übungen per CSV importieren. Spalten: Thema, Frage (___ für die Lücke), Option1, Option2, Option3, Option4, Richtig (1-4), Erklärung (optional)</p>
           <input type="file" id="grammar-csv-file" accept=".csv,text/csv" />
           <textarea id="grammar-csv-text" rows="4" placeholder="Präpositionen,I was born ___ 1995.,in,on,at,since,1,Jahre: in"></textarea>
           <button class="btn btn-secondary" id="grammar-csv-import-btn">Importieren</button>
-          <p id="grammar-csv-status" class="hint">${escapeHtml(grammarCsvStatusMessage)}</p>
+          <p id="grammar-csv-status" class="hint">${escapeHtml(grammarCsvStatusMessage)}</p>` : ''}
           <button class="btn btn-secondary btn-with-icon" id="grammar-csv-export-btn"><span class="icon-inline-wrap">${downloadIcon}</span> Als CSV exportieren</button>
-          <button class="btn btn-danger btn-with-icon" id="grammar-delete-all-btn"><span class="icon-inline-wrap">${trashIcon}</span> Alle Grammatikübungen löschen</button>
+          ${isMaster ? `<button class="btn btn-danger btn-with-icon" id="grammar-delete-all-btn"><span class="icon-inline-wrap">${trashIcon}</span> Alle Grammatikübungen löschen (lokal + Cloud)</button>` : ''}
         </section>
 
         <section>
           <h3><span class="icon-inline-wrap">${quoteIcon}</span> Idioms (<span id="idiom-count">${idiomCount}</span>)</h3>
-          <p class="hint">Eigene Sammlung, getrennt von den Vokabeln — in Auto- und Quiz-Modus per Umschalter "Vokabeln / Idioms / Beide" wählbar. Per CSV importieren. Spalten: Englisch (die Redewendung), Deutsch (Bedeutung), Kategorie (optional), Beispielsatz (optional), Wortart (optional)</p>
+          <p class="hint">Eigene Sammlung, getrennt von den Vokabeln — in Auto- und Quiz-Modus per Umschalter "Vokabeln / Idioms / Beide" wählbar.</p>
+          ${isMaster ? `
+          <p class="hint">Per CSV importieren. Spalten: Englisch (die Redewendung), Deutsch (Bedeutung), Kategorie (optional), Beispielsatz (optional), Wortart (optional)</p>
           <input type="file" id="idiom-csv-file" accept=".csv,text/csv" />
           <textarea id="idiom-csv-text" rows="4" placeholder="break the ice,das Eis brechen"></textarea>
           <button class="btn btn-secondary" id="idiom-csv-import-btn">Importieren</button>
-          <p id="idiom-csv-status" class="hint">${escapeHtml(idiomCsvStatusMessage)}</p>
+          <p id="idiom-csv-status" class="hint">${escapeHtml(idiomCsvStatusMessage)}</p>` : ''}
           <button class="btn btn-secondary btn-with-icon" id="idiom-csv-export-btn"><span class="icon-inline-wrap">${downloadIcon}</span> Als CSV exportieren</button>
-          <button class="btn btn-danger btn-with-icon" id="idiom-delete-all-btn"><span class="icon-inline-wrap">${trashIcon}</span> Alle Idioms löschen</button>
+          ${isMaster ? `<button class="btn btn-danger btn-with-icon" id="idiom-delete-all-btn"><span class="icon-inline-wrap">${trashIcon}</span> Alle Idioms löschen (lokal + Cloud)</button>` : ''}
         </section>
 
         <p class="hint center-text app-version">App-Version ${APP_VERSION}</p>
       </div>`;
 
-    container.querySelector('#restore-deleted-btn')?.addEventListener('click', async () => {
-      const restored = await vocabStore.restoreAllDeleted();
-      syncService.sync();
-      render();
-    });
-
-    container.querySelector('#add-form').addEventListener('submit', async (e) => {
+    container.querySelector('#add-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const form = e.target;
       const data = Object.fromEntries(new FormData(form).entries());
@@ -391,7 +390,7 @@ export function mount(container) {
 
     container.querySelector('#csv-export-btn').addEventListener('click', exportCsv);
 
-    container.querySelector('#delete-all-btn').addEventListener('click', async () => {
+    container.querySelector('#delete-all-btn')?.addEventListener('click', async () => {
       const count = vocabCache.length;
       if (!confirm(`Wirklich alle ${count} Vokabeln und deinen Lernfortschritt unwiderruflich löschen?`)) return;
       await vocabStore.removeAll();
@@ -405,13 +404,13 @@ export function mount(container) {
       updateVocabListOnly();
     });
 
-    container.querySelector('#csv-file').addEventListener('change', async (e) => {
+    container.querySelector('#csv-file')?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
       container.querySelector('#csv-text').value = await file.text();
     });
 
-    container.querySelector('#csv-import-btn').addEventListener('click', async () => {
+    container.querySelector('#csv-import-btn')?.addEventListener('click', async () => {
       const text = container.querySelector('#csv-text').value;
       const entries = parseCsv(text);
       if (entries.length === 0) {
@@ -432,13 +431,13 @@ export function mount(container) {
       updateVocabListOnly();
     });
 
-    container.querySelector('#grammar-csv-file').addEventListener('change', async (e) => {
+    container.querySelector('#grammar-csv-file')?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
       container.querySelector('#grammar-csv-text').value = await file.text();
     });
 
-    container.querySelector('#grammar-csv-import-btn').addEventListener('click', async () => {
+    container.querySelector('#grammar-csv-import-btn')?.addEventListener('click', async () => {
       const text = container.querySelector('#grammar-csv-text').value;
       const entries = parseGrammarCsv(text);
       if (entries.length === 0) {
@@ -458,20 +457,20 @@ export function mount(container) {
 
     container.querySelector('#grammar-csv-export-btn').addEventListener('click', () => exportGrammarCsv(grammarAllCache));
 
-    container.querySelector('#grammar-delete-all-btn').addEventListener('click', async () => {
+    container.querySelector('#grammar-delete-all-btn')?.addEventListener('click', async () => {
       if (!confirm(`Wirklich alle ${grammarCount} Grammatikübungen (inkl. Fortschritt) unwiderruflich löschen?`)) return;
       await grammarStore.removeAll();
       syncService.sync();
       updateGrammarUI();
     });
 
-    container.querySelector('#idiom-csv-file').addEventListener('change', async (e) => {
+    container.querySelector('#idiom-csv-file')?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
       container.querySelector('#idiom-csv-text').value = await file.text();
     });
 
-    container.querySelector('#idiom-csv-import-btn').addEventListener('click', async () => {
+    container.querySelector('#idiom-csv-import-btn')?.addEventListener('click', async () => {
       const text = container.querySelector('#idiom-csv-text').value;
       const entries = parseCsv(text);
       if (entries.length === 0) {
@@ -491,15 +490,49 @@ export function mount(container) {
 
     container.querySelector('#idiom-csv-export-btn').addEventListener('click', () => exportIdiomCsv(idiomAllCache));
 
-    container.querySelector('#idiom-delete-all-btn').addEventListener('click', async () => {
+    container.querySelector('#idiom-delete-all-btn')?.addEventListener('click', async () => {
       if (!confirm(`Wirklich alle ${idiomCount} Idioms (inkl. Lernfortschritt) unwiderruflich löschen?`)) return;
       await idiomStore.removeAll();
       syncService.sync();
       updateIdiomUI();
     });
 
+    renderDeviceRoleBox();
     renderAccountBox();
     renderVoiceBox();
+  }
+
+  /**
+   * Shows what this device is allowed to do and lets it be overridden. The
+   * detected role already does the right thing for the PC and the iPhone/
+   * iPad, so this is for the cases detection can't know about — a second
+   * Windows machine that should stay read-only, or a different computer
+   * taking over as the one that maintains the lists.
+   */
+  function renderDeviceRoleBox() {
+    const box = container.querySelector('#device-role-box');
+    if (!box) return;
+
+    const isMaster = deviceRole.isMaster();
+    box.innerHTML = `
+      <h3><span class="icon-inline-wrap">${checklistIcon}</span> Dieses Gerät</h3>
+      <p class="hint">${isMaster
+        ? 'Hauptgerät: Hier werden Vokabeln, Idioms und Grammatik gepflegt (hinzufügen, bearbeiten, importieren, löschen) und in die Cloud hochgeladen.'
+        : 'Nur Lesen: Stammdaten kommen ausschließlich aus der Cloud. Dieses Gerät lädt nur seinen eigenen Lernfortschritt hoch — Vokabeln, Idioms und Grammatik werden hier weder geändert noch gelöscht.'}</p>
+      <p class="hint">Automatisch erkannt: ${deviceRole.detected === 'master' ? 'Hauptgerät (Windows-PC)' : 'Nur Lesen'}${deviceRole.isAuto() ? '' : ' — von Hand überschrieben'}</p>
+      <button class="btn btn-secondary" id="device-role-toggle-btn">${isMaster ? 'Auf "nur Lesen" umstellen' : 'Als Hauptgerät festlegen'}</button>
+      ${deviceRole.isAuto() ? '' : '<button class="btn btn-secondary" id="device-role-auto-btn">Wieder automatisch erkennen</button>'}`;
+
+    box.querySelector('#device-role-toggle-btn').addEventListener('click', () => {
+      if (!isMaster && !confirm('Dieses Gerät als Hauptgerät festlegen? Änderungen und Löschungen von hier aus werden dann in die Cloud übertragen und gelten für alle Geräte.')) return;
+      deviceRole.set(isMaster ? 'reader' : 'master');
+      render();
+    });
+
+    box.querySelector('#device-role-auto-btn')?.addEventListener('click', () => {
+      deviceRole.set(null);
+      render();
+    });
   }
 
   /**

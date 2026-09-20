@@ -1,6 +1,8 @@
 import { db, STORE_NAMES } from './db.js';
 import { defaultSrs, schedule } from '../srs/scheduler.js';
 import { touchStreak, getStreak } from './streak.js';
+import { deletionQueue } from './deletionQueue.js';
+import { mergeRemoteRecords } from './remoteMerge.js';
 
 // How many candidate records getDue() reads via the dueDate index before
 // shuffling and slicing to the requested session size. Well above any
@@ -168,36 +170,42 @@ export const vocabStore = {
     return record;
   },
 
+  /** Really removes the entry here and queues its id so the next sync removes it from Firestore too. No tombstone, nothing to restore. */
   async remove(id) {
     const record = await db.get(id);
     if (!record) return;
-    record.deleted = true;
-    record.updatedAt = Date.now();
-    record.dirty = true;
-    await db.put(record);
+    await db.delete(id);
+    await deletionQueue.queueDeletes(STORE_NAMES.VOCAB, [id]);
   },
 
-  /** Soft-deletes every vocab entry (same tombstone mechanism as remove()) so the deletion also propagates through sync instead of being resurrected by a later merge. */
+  /** Empties the whole collection here and marks it for deletion in the cloud — one wipe marker instead of one id per record. */
   async removeAll() {
-    const all = await this.getAll();
-    const now = Date.now();
-    const updated = all.map((v) => ({ ...v, deleted: true, updatedAt: now, dirty: true }));
-    await db.putAll(updated);
+    await db.clear();
+    await deletionQueue.queueWipe(STORE_NAMES.VOCAB);
   },
 
-  /** How many entries are soft-deleted (tombstoned, not physically removed) right now — a diagnostic for "getAll() shows 0 but nothing was actually purged". */
-  async getDeletedCount() {
-    const all = await db.getAll();
-    return all.filter((v) => v.deleted).length;
+  /** Drops local records the cloud says are gone (deletion markers pulled by syncService). Silently ignores ids this device never had. */
+  async applyRemoteDeletions(ids) {
+    if (!ids || ids.length === 0) return;
+    await db.deleteAll(ids);
   },
 
-  /** Undoes removeAll()/remove(): un-tombstones every soft-deleted entry, bumping updatedAt so the restore also propagates through sync. Recovery path if "Alle löschen" ran unintentionally — nothing was ever physically purged. */
-  async restoreAllDeleted() {
+  /** Empties the store without queueing anything — for a reader applying a wipe the master already carried out in the cloud. */
+  async clearLocal() {
+    await db.clear();
+  },
+
+  /**
+   * Removes leftovers from the tombstone era (`deleted: true` records kept
+   * in the store instead of being deleted). Read paths still filter them out
+   * as well, so a purge that hasn't finished yet can't briefly resurrect a
+   * deleted word.
+   */
+  async purgeTombstones() {
     const all = await db.getAll();
-    const now = Date.now();
-    const toRestore = all.filter((v) => v.deleted).map((v) => ({ ...v, deleted: false, updatedAt: now, dirty: true }));
-    await db.putAll(toRestore);
-    return toRestore.length;
+    const ids = all.filter((v) => v.deleted).map((v) => v.id);
+    if (ids.length > 0) await db.deleteAll(ids);
+    return ids.length;
   },
 
   async markReviewed(id, known) {
@@ -228,30 +236,7 @@ export const vocabStore = {
     await db.putAll(toClear);
   },
 
-  /**
-   * Merge a set of remote records (from the sync gist) into local storage,
-   * per-record last-write-wins by updatedAt. Returns the merged full set,
-   * ready to be re-uploaded.
-   */
-  async mergeFromRemote(remoteRecords) {
-    const localAll = await db.getAll();
-    const localById = new Map(localAll.map((r) => [r.id, r]));
-    const remoteById = new Map((remoteRecords || []).map((r) => [r.id, r]));
-    const allIds = new Set([...localById.keys(), ...remoteById.keys()]);
-
-    const merged = [];
-    for (const id of allIds) {
-      const local = localById.get(id);
-      const remote = remoteById.get(id);
-      if (local && remote) {
-        merged.push(remote.updatedAt > local.updatedAt ? { ...remote, dirty: false } : local);
-      } else if (local) {
-        merged.push(local);
-      } else {
-        merged.push({ ...remote, dirty: false });
-      }
-    }
-    await db.putAll(merged);
-    return merged;
+  mergeFromRemote(remoteRecords) {
+    return mergeRemoteRecords(STORE_NAMES.VOCAB, remoteRecords);
   }
 };

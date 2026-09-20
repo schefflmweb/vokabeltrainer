@@ -96,6 +96,18 @@ export const db = {
     return wrapRequest(store.delete(id));
   },
 
+  async deleteAll(ids, storeName = STORE_VOCAB) {
+    const db_ = await openDb();
+    const store = db_.transaction(storeName, 'readwrite').objectStore(storeName);
+    await Promise.all(ids.map((id) => wrapRequest(store.delete(id))));
+  },
+
+  /** Empties a whole object store in one transaction — used by "alles löschen", where deleting record by record would mean thousands of round trips. */
+  async clear(storeName = STORE_VOCAB) {
+    const store = await tx(storeName, 'readwrite');
+    return wrapRequest(store.clear());
+  },
+
   async count(storeName = STORE_VOCAB) {
     const store = await tx(storeName, 'readonly');
     return wrapRequest(store.count());

@@ -1,6 +1,8 @@
 import { db, STORE_NAMES } from './db.js';
 import { defaultSrs, schedule } from '../srs/scheduler.js';
 import { touchStreak, getStreak } from './streak.js';
+import { deletionQueue } from './deletionQueue.js';
+import { mergeRemoteRecords } from './remoteMerge.js';
 
 /**
  * Same shape and behavior as vocabStore (records look identical: en/de/
@@ -155,34 +157,33 @@ export const idiomStore = {
     return record;
   },
 
+  /** Same hard delete as vocabStore.remove(): gone here, queued for removal from Firestore. */
   async remove(id) {
     const record = await db.get(id, STORE);
     if (!record) return;
-    record.deleted = true;
-    record.updatedAt = Date.now();
-    record.dirty = true;
-    await db.put(record, STORE);
+    await db.delete(id, STORE);
+    await deletionQueue.queueDeletes(STORE, [id]);
   },
 
-  /** Soft-deletes every idiom entry (same tombstone mechanism as remove()) so the deletion also propagates through sync instead of being resurrected by a later merge. */
   async removeAll() {
-    const all = await this.getAll();
-    const now = Date.now();
-    const updated = all.map((v) => ({ ...v, deleted: true, updatedAt: now, dirty: true }));
-    await db.putAll(updated, STORE);
+    await db.clear(STORE);
+    await deletionQueue.queueWipe(STORE);
   },
 
-  async getDeletedCount() {
-    const all = await db.getAll(STORE);
-    return all.filter((v) => v.deleted).length;
+  async applyRemoteDeletions(ids) {
+    if (!ids || ids.length === 0) return;
+    await db.deleteAll(ids, STORE);
   },
 
-  async restoreAllDeleted() {
+  async clearLocal() {
+    await db.clear(STORE);
+  },
+
+  async purgeTombstones() {
     const all = await db.getAll(STORE);
-    const now = Date.now();
-    const toRestore = all.filter((v) => v.deleted).map((v) => ({ ...v, deleted: false, updatedAt: now, dirty: true }));
-    await db.putAll(toRestore, STORE);
-    return toRestore.length;
+    const ids = all.filter((v) => v.deleted).map((v) => v.id);
+    if (ids.length > 0) await db.deleteAll(ids, STORE);
+    return ids.length;
   },
 
   async markReviewed(id, known) {
@@ -213,26 +214,7 @@ export const idiomStore = {
     await db.putAll(toClear, STORE);
   },
 
-  /** Same per-record last-write-wins merge as vocabStore — used by syncService for the idioms collection. */
-  async mergeFromRemote(remoteRecords) {
-    const localAll = await db.getAll(STORE);
-    const localById = new Map(localAll.map((r) => [r.id, r]));
-    const remoteById = new Map((remoteRecords || []).map((r) => [r.id, r]));
-    const allIds = new Set([...localById.keys(), ...remoteById.keys()]);
-
-    const merged = [];
-    for (const id of allIds) {
-      const local = localById.get(id);
-      const remote = remoteById.get(id);
-      if (local && remote) {
-        merged.push(remote.updatedAt > local.updatedAt ? { ...remote, dirty: false } : local);
-      } else if (local) {
-        merged.push(local);
-      } else {
-        merged.push({ ...remote, dirty: false });
-      }
-    }
-    await db.putAll(merged, STORE);
-    return merged;
+  mergeFromRemote(remoteRecords) {
+    return mergeRemoteRecords(STORE, remoteRecords);
   }
 };

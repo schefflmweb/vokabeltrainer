@@ -1,4 +1,7 @@
 import { syncService } from './data/syncService.js';
+import { vocabStore } from './data/vocabStore.js';
+import { idiomStore } from './data/idiomStore.js';
+import { grammarStore } from './data/grammarStore.js';
 import * as audioMode from './modes/audioMode.js';
 import * as quizMode from './modes/quizMode.js';
 import * as grammarMode from './modes/grammarMode.js';
@@ -90,4 +93,11 @@ if (refreshBtn) {
 
 const initial = (location.hash || '#audio').slice(1);
 showMode(modes[initial] ? initial : 'audio');
+
+// Records deleted by an older version were only flagged `deleted: true` and
+// kept. They're filtered out of every read, but they're still taking up room
+// and would be pushed around by the sync — clear them out once, here rather
+// than in the sync, so it also happens on a device that never signs in.
+Promise.all([vocabStore, idiomStore, grammarStore].map((store) => store.purgeTombstones()));
+
 syncService.sync();

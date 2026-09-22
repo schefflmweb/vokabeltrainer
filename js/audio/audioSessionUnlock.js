@@ -15,7 +15,18 @@
  * carry over to audio started later on the same page (Web Audio tones,
  * speechSynthesis) too. Must be started synchronously from a real tap,
  * same gesture requirement as toneService.unlock().
+ *
+ * The loop deliberately carries a tone rather than digital silence: a car
+ * stereo that receives nothing but zeroes may still let its audio link go
+ * idle, and then the next word has to wait for it to wake up — which is why
+ * the first word of a card, the one after the longest pause, was the one
+ * arriving late. The tone is attenuated twice (a quiet waveform, played at
+ * a low element volume) to roughly -66 dBFS, far below anything audible
+ * over road noise, and its frequency divides the sample rate exactly so the
+ * loop point can't click.
  */
+
+const KEEP_ALIVE_VOLUME = 0.05;
 
 let audioEl = null;
 
@@ -24,11 +35,13 @@ let audioEl = null;
 const PLAY_SETTLE_MAX_MS = 600;
 const AFTER_PLAY_SETTLE_MS = 250;
 
-/** A ~0.1s silent WAV, built at runtime (no network request, no bundled asset). */
-function buildSilentAudioUrl() {
+/** A 1s WAV holding a very quiet tone, built at runtime (no network request, no bundled asset). */
+function buildKeepAliveAudioUrl() {
   const sampleRate = 8000;
-  const numSamples = 800; // 0.1s, 8-bit mono => 1 byte/sample
-  const dataSize = numSamples;
+  const numSamples = sampleRate; // 1s, 16-bit mono => 2 bytes/sample
+  const toneHz = 200; // 8000 / 200 = 40 samples per period, so 1s holds exactly 200 of them
+  const amplitude = 300; // of 32767 — about -41 dBFS before the element's own volume
+  const dataSize = numSamples * 2;
   const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);
 
@@ -44,12 +57,15 @@ function buildSilentAudioUrl() {
   view.setUint16(20, 1, true); // AudioFormat: PCM
   view.setUint16(22, 1, true); // NumChannels: mono
   view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate, true); // ByteRate = sampleRate * channels * bytes/sample
-  view.setUint16(32, 1, true); // BlockAlign
-  view.setUint16(34, 8, true); // BitsPerSample
+  view.setUint32(28, sampleRate * 2, true); // ByteRate = sampleRate * channels * bytes/sample
+  view.setUint16(32, 2, true); // BlockAlign
+  view.setUint16(34, 16, true); // BitsPerSample
   writeString(36, 'data');
   view.setUint32(40, dataSize, true);
-  for (let i = 0; i < dataSize; i++) view.setUint8(44 + i, 128); // silence (8-bit unsigned midpoint)
+  for (let i = 0; i < numSamples; i++) {
+    const sample = Math.round(amplitude * Math.sin((2 * Math.PI * toneHz * i) / sampleRate));
+    view.setInt16(44 + i * 2, sample, true);
+  }
 
   return URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
 }
@@ -57,15 +73,15 @@ function buildSilentAudioUrl() {
 export const audioSessionUnlock = {
   /**
    * Call synchronously from the same tap as toneService.unlock(), at the
-   * start of an Auto-mode session. Keeps looping silently for as long as
-   * Auto mode stays mounted — see stop(). Resolves (never rejects) once
-   * it's safe to start speaking.
+   * start of an Auto-mode session. Keeps looping for as long as Auto mode
+   * stays mounted, inaudibly quiet but never digitally silent — see stop().
+   * Resolves (never rejects) once it's safe to start speaking.
    */
   start() {
     if (!audioEl) {
-      audioEl = new Audio(buildSilentAudioUrl());
+      audioEl = new Audio(buildKeepAliveAudioUrl());
       audioEl.loop = true;
-      audioEl.volume = 0;
+      audioEl.volume = KEEP_ALIVE_VOLUME;
     }
     // Best-effort — if this silently fails, speechSynthesis just falls back
     // to its normal (ambient-category, phone-speaker-only) behavior.

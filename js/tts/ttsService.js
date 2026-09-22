@@ -81,13 +81,17 @@ let generation = 0;
 // as cancel(). Only cancel when something is actually playing, and then give
 // the engine a moment before speaking again.
 const AFTER_CANCEL_DELAY_MS = 80;
-// Safari accepts an utterance and then sometimes stays silent — typically with
-// a voice that isn't on the device. If speaking hasn't begun by now, and the
-// engine isn't busy with it either, the utterance is dropped and retried with
-// whatever voice the system picks itself. Generous, because the first
-// utterance after a pause can take a moment to warm up, and cutting off
-// speech that was about to play would be worse than waiting.
-const SPEECH_START_TIMEOUT_MS = 1400;
+// Safari accepts an utterance and then sometimes stays silent — but only,
+// as far as we've seen, with a voice that is synthesised over the network.
+// An on-device voice that hasn't started yet is simply warming up, and over
+// Bluetooth that takes considerably longer: a car stereo has to wake its
+// audio link first, and the first word of a card comes after the longest
+// pause in a session. Replacing the utterance there cost the word instead of
+// saving it — it arrived late, or (cancel() and speak() landing in the same
+// tick, which the engines drop) not at all, while the translation spoken a
+// few seconds later was always fine. So the backstop is armed for network
+// voices only, and waits longer before it acts.
+const SPEECH_START_TIMEOUT_MS = 2500;
 
 function speakOne(text, langPrefix, { rate, gen, onDone, useDefaultVoice } = {}) {
   const utterance = new SpeechSynthesisUtterance(text);
@@ -115,14 +119,18 @@ function speakOne(text, langPrefix, { rate, gen, onDone, useDefaultVoice } = {})
   // A queue that has been idle can need a nudge before it plays anything.
   speechSynthesis.resume();
 
-  if (!useDefaultVoice) {
+  if (voice && !useDefaultVoice && !runsOnDevice(voice)) {
     startWatch = setTimeout(() => {
-      // speaking means the engine has it in hand — leave it alone rather than
-      // risk cutting off a voice that is simply slow to get going.
-      if (settled || gen !== generation || speechSynthesis.speaking) return;
+      // speaking/pending means the engine has it in hand — leave it alone
+      // rather than risk cutting off a voice that is simply slow to start.
+      if (settled || gen !== generation || speechSynthesis.speaking || speechSynthesis.pending) return;
       replaced = true;
       speechSynthesis.cancel();
-      speakOne(text, langPrefix, { rate, gen, onDone, useDefaultVoice: true });
+      // Re-speaking in the same tick as cancel() is what the engines drop
+      // (see AFTER_CANCEL_DELAY_MS) — that would lose the word for good.
+      setTimeout(() => {
+        if (gen === generation) speakOne(text, langPrefix, { rate, gen, onDone, useDefaultVoice: true });
+      }, AFTER_CANCEL_DELAY_MS);
     }, SPEECH_START_TIMEOUT_MS);
   }
   return utterance;

@@ -76,15 +76,83 @@ const BATCH_WRITE_LIMIT = 450;
  */
 const SYNC_SCHEMA_VERSION = 2;
 
+/**
+ * A run counts as stuck only when *nothing* has happened for this long.
+ * A plain timeout would have to choose between cutting off a legitimately
+ * slow run (a first full pull of tens of thousands of records takes minutes)
+ * and being too generous to help; so every network step reports progress
+ * instead, and only the absence of progress trips the watchdog.
+ *
+ * It exists because Firestore's SDK retries an unreachable or blocked
+ * backend silently and indefinitely: a `getDocs()` that will never come back
+ * (an ad blocker, a company proxy, a DNS filter) looks exactly like a slow
+ * one. Without the watchdog the app sat on "Synchronisiere …" forever, and
+ * since every later sync() joined that same pending run, it stopped syncing
+ * altogether until the page was reloaded.
+ */
+const STALL_TIMEOUT_MS = 3 * 60 * 1000;
+const STALL_CHECK_MS = 15 * 1000;
+
+/** After this long the status says the run is still going, so a big but healthy sync isn't mistaken for a hang. */
+const SLOW_NOTICE_MS = 30 * 1000;
+
 let listeners = [];
 let status = { state: 'offline', message: 'Nur lokal gespeichert', lastSync: null };
 let syncPromise = null;
 let scheduleTimer = null;
 const SCHEDULE_DEBOUNCE_MS = 3000;
 
+// Runs are numbered so a run the watchdog has already given up on can't
+// overwrite the status of the one that replaced it.
+let activeRun = 0;
+let stalledRun = 0;
+let lastProgressAt = 0;
+
 function setStatus(next) {
   status = { ...status, ...next };
   listeners.forEach((fn) => fn(status));
+}
+
+/** Every step that talks to Firestore calls this — it's what tells a slow run from a stuck one. */
+function beat() {
+  lastProgressAt = Date.now();
+}
+
+function watchForStall(runId) {
+  const startedAt = Date.now();
+  beat();
+  let noticed = false;
+  const timer = setInterval(() => {
+    if (runId !== activeRun) {
+      clearInterval(timer);
+      return;
+    }
+    if (Date.now() - lastProgressAt >= STALL_TIMEOUT_MS) {
+      clearInterval(timer);
+      stalledRun = runId;
+      setStatus({
+        state: 'error',
+        message: 'Firestore antwortet seit einigen Minuten nicht — möglicherweise blockiert eine Browser-Erweiterung oder das Netzwerk den Zugriff auf firestore.googleapis.com. Der Versuch läuft im Hintergrund weiter; mit "Jetzt synchronisieren" startest du einen neuen.'
+      });
+      return;
+    }
+    if (!noticed && Date.now() - startedAt >= SLOW_NOTICE_MS && status.state === 'syncing') {
+      noticed = true;
+      setStatus({ state: 'syncing', message: 'Synchronisiere … (bei großen Sammlungen dauert das einige Minuten)' });
+    }
+  }, STALL_CHECK_MS);
+  return () => clearInterval(timer);
+}
+
+/** Numbers the run, starts its watchdog, and clears `syncPromise` when it finishes — but only if it's still the current run. */
+function runGuarded(start) {
+  const runId = ++activeRun;
+  const stopWatch = watchForStall(runId);
+  const promise = start(runId).finally(() => {
+    stopWatch();
+    if (syncPromise === promise) syncPromise = null;
+  });
+  return promise;
 }
 
 // Shows the last known state (and record counts) immediately on load,
@@ -121,6 +189,7 @@ async function inBatches(dbFns, firestoreDb, items, write) {
     const batch = dbFns.writeBatch(firestoreDb);
     for (const item of items.slice(i, i + BATCH_WRITE_LIMIT)) write(batch, item);
     await batch.commit();
+    beat(); // a long push is dozens of these — each one proves the run is alive
   }
 }
 
@@ -296,12 +365,16 @@ export const syncService = {
     return status;
   },
 
-  /** Runs a sync now. Concurrent calls join the same in-flight run instead of firing overlapping requests. */
-  sync() {
-    if (syncPromise) return syncPromise;
-    syncPromise = this._runSync().finally(() => {
-      syncPromise = null;
-    });
+  /**
+   * Runs a sync now. Concurrent calls join the same in-flight run instead of
+   * firing overlapping requests. `force` (the "Jetzt synchronisieren" button)
+   * additionally starts a fresh run over one the watchdog has given up on —
+   * that one is left to finish in the background, so a stuck sync no longer
+   * means reloading the page.
+   */
+  sync({ force = false } = {}) {
+    if (syncPromise && !(force && stalledRun === activeRun)) return syncPromise;
+    syncPromise = runGuarded((runId) => this._runSync(runId));
     return syncPromise;
   },
 
@@ -334,59 +407,72 @@ export const syncService = {
    * device's own incremental query.
    */
   fullResync() {
-    if (syncPromise) return syncPromise.then(() => this.fullResync());
-    syncPromise = this._runFullResync().finally(() => {
-      syncPromise = null;
-    });
+    // Waits for a healthy run to finish first, but doesn't queue behind a
+    // stuck one — that promise might never settle.
+    if (syncPromise && stalledRun !== activeRun) return syncPromise.then(() => this.fullResync());
+    syncPromise = runGuarded((runId) => this._runFullResync(runId));
     return syncPromise;
   },
 
-  async _runFullResync() {
+  async _runFullResync(runId) {
     await rewindCursors();
-    return this._runSync();
+    return this._runSync(runId);
   },
 
-  async _runSync() {
+  async _runSync(runId) {
+    // A run the watchdog already gave up on keeps going, but must not
+    // overwrite the status of the run that replaced it.
+    const report = (next) => {
+      if (runId === activeRun) setStatus(next);
+    };
+
     await firebaseAuth.ready();
     if (!firebaseAuth.isConfigured()) {
-      setStatus({ state: 'signed-out', message: 'Nicht verbunden – arbeitet lokal weiter' });
+      report({ state: 'signed-out', message: 'Nicht verbunden – arbeitet lokal weiter' });
       return;
     }
 
-    setStatus({ state: 'syncing', message: 'Synchronisiere …' });
+    report({ state: 'syncing', message: 'Synchronisiere …' });
     try {
       await migrateIfNeeded();
       const { db: firestoreDb, dbFns } = await getFirebase();
+      beat();
       const isMaster = deviceRole.isMaster();
 
       const wipeMarkers = await readWipeMarkers(dbFns, firestoreDb);
+      beat();
       const { byCollection: remoteDeletions, pullStartedAt: deletionsPulledAt } = await pullDeletions(dbFns, firestoreDb);
+      beat();
 
       const counts = {};
       for (const { store, collectionName, field } of COLLECTIONS) {
         await applyRemoteWipe(store, collectionName, wipeMarkers[collectionName] || 0);
         if (isMaster) await pushLocalWipe(dbFns, firestoreDb, collectionName);
         await store.applyRemoteDeletions(remoteDeletions[collectionName] || []);
+        beat();
 
         const cursorKey = `firestoreCursor_${collectionName}`;
         const { records: remoteRecords, pullStartedAt } = await pullCollection(dbFns, firestoreDb, collectionName, cursorKey);
+        beat();
         const { merged, tombstoneIds } = await store.mergeFromRemote(remoteRecords);
         counts[field] = merged.length;
+        beat();
 
         if (isMaster) {
           await pushMaster(dbFns, firestoreDb, store, collectionName, tombstoneIds);
         } else {
           await pushReader(dbFns, firestoreDb, store, collectionName);
         }
+        beat();
 
         await db.setMeta(cursorKey, pullStartedAt);
       }
       await db.setMeta('firestoreCursor_deletions', deletionsPulledAt);
 
       await Promise.all([db.setMeta('lastSync', Date.now()), db.setMeta('lastSyncCounts', counts)]);
-      setStatus({ state: 'synced', message: 'Synchronisiert', lastSync: Date.now(), counts });
+      report({ state: 'synced', message: 'Synchronisiert', lastSync: Date.now(), counts });
     } catch (err) {
-      setStatus({ state: 'error', message: firestoreErrorMessage(err) });
+      report({ state: 'error', message: firestoreErrorMessage(err) });
     }
   }
 };

@@ -588,7 +588,9 @@ export function mount(container) {
         await firebaseAuth.disconnect();
         renderAccountBox();
       });
-      box.querySelector('#sync-now-btn').addEventListener('click', () => syncService.sync());
+      // force: this button is also the way out of a sync the watchdog has
+      // given up on — it starts a fresh run instead of joining the stuck one.
+      box.querySelector('#sync-now-btn').addEventListener('click', () => syncService.sync({ force: true }));
       box.querySelector('#full-resync-btn').addEventListener('click', () => syncService.fullResync());
       updateUnsyncedText();
     } else {

@@ -826,23 +826,6 @@ section.progress-box {
   border-radius: 12px;
 }
 
-#tts-debug-details {
-  margin-top: 14px;
-}
-
-#tts-debug-details summary {
-  cursor: pointer;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-}
-
-#tts-debug-log {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.8rem;
-  white-space: pre;
-  resize: vertical;
-}
-
 .add-form {
   display: flex;
   flex-direction: column;

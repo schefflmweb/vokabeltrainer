@@ -16,30 +16,16 @@
  * speechSynthesis) too. Must be started synchronously from a real tap,
  * same gesture requirement as toneService.unlock().
  *
- * The loop deliberately carries a tone rather than digital silence: a car
- * stereo that receives nothing but zeroes may still let its audio link go
- * idle between words, and then the next one has to wait for it to wake up
- * again. That's a real, reported symptom here — every word starts late over
- * Bluetooth, not just the session's first, and a long one is more likely to
- * outlast the wake-up delay than a short one, which can be swallowed
- * completely. The frequency divides the sample rate exactly so the loop
- * point can't click.
- *
- * The level is the part that's still a guess. A first attempt at roughly
- * -66 dBFS (quiet enough that it can't be described as anything but
- * inaudible) didn't stop the per-word delay — plausibly because something
- * along the chain (the phone's own silence detection, the Bluetooth link,
- * or the car's own amplifier muting near-silent input) treats audio that
- * quiet as no different from true digital silence, and re-applies its
- * wake-up delay regardless. This is a deliberately louder second attempt,
- * on the theory that it needs to register as unambiguously "there is sound
- * playing" rather than just "not exactly zero" — at the cost of very
- * possibly being faintly audible now, which the first version tried hard
- * to avoid. Worth it if it actually fixes the delay; if it's audible AND
- * doesn't help, that's a real answer too, not just another guess.
+ * The loop carries a very quiet tone (about -67 dBFS after the element's
+ * volume) rather than digital silence, and its frequency divides the sample
+ * rate exactly so the loop point can't click. A louder version (about
+ * -24 dBFS) was tried against a Bluetooth delay in the car and made no
+ * difference - what fixed that was the "Vorlauf" before automatic speech and
+ * speaking the way the older version did (see ttsService.startFresh) - so it
+ * stays as quiet as it can be.
  */
 
-const KEEP_ALIVE_VOLUME = 0.35;
+const KEEP_ALIVE_VOLUME = 0.05;
 
 let audioEl = null;
 
@@ -53,7 +39,7 @@ function buildKeepAliveAudioUrl() {
   const sampleRate = 8000;
   const numSamples = sampleRate; // 1s, 16-bit mono => 2 bytes/sample
   const toneHz = 200; // 8000 / 200 = 40 samples per period, so 1s holds exactly 200 of them
-  const amplitude = 6000; // of 32767 — about -14.7 dBFS before the element's own volume
+  const amplitude = 300; // of 32767 — about -41 dBFS before the element's own volume
   const dataSize = numSamples * 2;
   const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);

@@ -122,7 +122,6 @@ export function mount(container) {
 
   function startSession() {
     if (!pendingQueue) return; // guarded by disabled button; shouldn't fire
-    ttsService.debugMark(`Auto-Sitzung gestartet (${interactionMode})`); // marks the cold first word in the diagnose log
     toneService.unlock(); // real tap — unlocks Web Audio for the rest of this session
     ttsService.prime(); // real tap — unlocks speech, so the first word may start a moment later
     const audioReady = audioSessionUnlock.start(); // real tap — nudges iOS toward routing audio to Bluetooth (see module doc)

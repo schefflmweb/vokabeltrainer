@@ -10,7 +10,7 @@
  *
  * The commonly reported (not guaranteed — can't be verified without a real
  * device connected to real Bluetooth car audio) workaround: keep a real,
- * if silent, <audio> element continuously playing. Safari then tends to
+ * if quiet, <audio> element continuously playing. Safari then tends to
  * treat the page's whole audio session as real media playback, which can
  * carry over to audio started later on the same page (Web Audio tones,
  * speechSynthesis) too. Must be started synchronously from a real tap,
@@ -18,15 +18,28 @@
  *
  * The loop deliberately carries a tone rather than digital silence: a car
  * stereo that receives nothing but zeroes may still let its audio link go
- * idle, and then the next word has to wait for it to wake up — which is why
- * the first word of a card, the one after the longest pause, was the one
- * arriving late. The tone is attenuated twice (a quiet waveform, played at
- * a low element volume) to roughly -66 dBFS, far below anything audible
- * over road noise, and its frequency divides the sample rate exactly so the
- * loop point can't click.
+ * idle between words, and then the next one has to wait for it to wake up
+ * again. That's a real, reported symptom here — every word starts late over
+ * Bluetooth, not just the session's first, and a long one is more likely to
+ * outlast the wake-up delay than a short one, which can be swallowed
+ * completely. The frequency divides the sample rate exactly so the loop
+ * point can't click.
+ *
+ * The level is the part that's still a guess. A first attempt at roughly
+ * -66 dBFS (quiet enough that it can't be described as anything but
+ * inaudible) didn't stop the per-word delay — plausibly because something
+ * along the chain (the phone's own silence detection, the Bluetooth link,
+ * or the car's own amplifier muting near-silent input) treats audio that
+ * quiet as no different from true digital silence, and re-applies its
+ * wake-up delay regardless. This is a deliberately louder second attempt,
+ * on the theory that it needs to register as unambiguously "there is sound
+ * playing" rather than just "not exactly zero" — at the cost of very
+ * possibly being faintly audible now, which the first version tried hard
+ * to avoid. Worth it if it actually fixes the delay; if it's audible AND
+ * doesn't help, that's a real answer too, not just another guess.
  */
 
-const KEEP_ALIVE_VOLUME = 0.05;
+const KEEP_ALIVE_VOLUME = 0.35;
 
 let audioEl = null;
 
@@ -40,7 +53,7 @@ function buildKeepAliveAudioUrl() {
   const sampleRate = 8000;
   const numSamples = sampleRate; // 1s, 16-bit mono => 2 bytes/sample
   const toneHz = 200; // 8000 / 200 = 40 samples per period, so 1s holds exactly 200 of them
-  const amplitude = 300; // of 32767 — about -41 dBFS before the element's own volume
+  const amplitude = 6000; // of 32767 — about -14.7 dBFS before the element's own volume
   const dataSize = numSamples * 2;
   const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);

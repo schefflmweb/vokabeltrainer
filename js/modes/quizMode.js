@@ -40,6 +40,14 @@ export function mount(container) {
   let direction = 'en-de'; // 'en-de' | 'de-en'
   let source = 'vocab'; // 'vocab' | 'idioms' | 'both'
   let answered = false;
+  // Cards answered wrongly (or, in "Zuhören", not marked "Kannte ich") in the
+  // round that just ran, so the finished screen can offer them as a round of
+  // their own. `isRepeat` marks that round: its answers don't touch the
+  // spaced-repetition schedule again — the first attempt already recorded the
+  // miss, and a correct answer seconds later would push the card's next
+  // review out as if it had been known all along.
+  let missed = [];
+  let isRepeat = false;
 
   // "Zuhören" per-card state (mirrors Auto mode's tap flow).
   let rtRevealed = false;
@@ -109,10 +117,29 @@ export function mount(container) {
     renderSelect();
   }
 
+  /** Starts a round over just the cards missed in the last one, in the same practice type and direction. Called from a tap, like startSession. */
+  function startRepeat() {
+    if (missed.length === 0) return;
+    queue = shuffle(missed);
+    missed = [];
+    isRepeat = true;
+    stats = { known: 0, unknown: 0 };
+    answered = false;
+    index = 0;
+    phase = 'active';
+    if (quizType === 'readthink') {
+      enterReadThink(currentCard()); // real tap — speaks the first card synchronously
+    } else {
+      render();
+    }
+  }
+
   async function startSession(type) {
     quizType = type;
     stats = { known: 0, unknown: 0 };
     answered = false;
+    missed = [];
+    isRepeat = false;
 
     if (type === 'readthink') {
       if (!pendingQueue) return; // guarded by disabled button; shouldn't fire
@@ -136,6 +163,8 @@ export function mount(container) {
   }
 
   function backToSelect() {
+    missed = [];
+    isRepeat = false;
     clearRtTimers();
     rtButtonsActive = false;
     phase = 'select';
@@ -144,6 +173,8 @@ export function mount(container) {
 
   function registerAnswer(correct, card) {
     stats[correct ? 'known' : 'unknown'] += 1;
+    if (!correct) missed.push(card);
+    if (isRepeat) return;
     card.__store.markReviewed(card.id, correct);
     syncService.scheduleSync();
   }
@@ -224,15 +255,20 @@ export function mount(container) {
     const rtReady = quizType !== 'readthink' || !!pendingQueue?.length;
     container.innerHTML = `
       <div class="quiz-mode pad center">
-        <h2 class="btn-with-icon"><span class="icon-inline-wrap icon-lg">${starIcon}</span> Runde fertig!</h2>
+        <h2 class="btn-with-icon"><span class="icon-inline-wrap icon-lg">${starIcon}</span> ${isRepeat ? 'Wiederholung fertig!' : 'Runde fertig!'}</h2>
         <p class="hint">${stats.known} richtig · ${stats.unknown} falsch</p>
-        <button class="btn btn-huge btn-primary btn-with-icon" id="again-btn" ${rtReady ? '' : 'disabled'}>
+        ${missed.length > 0 ? `
+        <button class="btn btn-huge btn-danger btn-with-icon" id="repeat-btn">
+          <span class="icon-inline-wrap icon-lg">${refreshIcon}</span> ${missed.length === 1 ? '1 Fehler' : `${missed.length} Fehler`} wiederholen
+        </button>` : ''}
+        <button class="btn btn-huge ${missed.length > 0 ? 'btn-secondary' : 'btn-primary'} btn-with-icon" id="again-btn" ${rtReady ? '' : 'disabled'}>
           ${rtReady
             ? `<span class="icon-inline-wrap icon-lg">${refreshIcon}</span> Neue Runde`
             : `<span class="icon-inline-wrap icon-lg">${refreshIcon}</span> Lädt …`}
         </button>
         <button class="btn btn-secondary" id="switch-btn">Modus wechseln</button>
       </div>`;
+    container.querySelector('#repeat-btn')?.addEventListener('click', startRepeat);
     container.querySelector('#again-btn').addEventListener('click', () => startSession(quizType));
     container.querySelector('#switch-btn').addEventListener('click', backToSelect);
   }

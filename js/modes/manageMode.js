@@ -661,6 +661,13 @@ export function mount(container) {
         <select class="voice-select" id="voice-select-de">${voiceOptionsHtml('de')}</select>
         <button type="button" class="btn btn-icon" id="voice-test-de" aria-label="Deutsche Stimme anhören"><span class="icon-inline-wrap">${speakerIcon}</span></button>
       </div>
+      <div class="voice-row">
+        <span class="voice-row-label">Vorlauf</span>
+        <select class="voice-select" id="lead-in-select">
+          ${[[0, "Aus"], [600, "0,6 s"], [1000, "1 s"], [1500, "1,5 s"], [2000, "2 s"]].map(([ms, label]) => `<option value="${ms}" ${ttsService.getLeadInMs() === ms ? "selected" : ""}>${label}</option>`).join("")}
+        </select>
+      </div>
+      <p class="hint">Für Bluetooth im Auto: Vor jedem automatisch vorgelesenen Wort ertönt ein kurzes leises Signal, dann wartet die App so lange, bis das Autoradio wach ist. Wird die Auflösung oder ein Wort verschluckt, hier höher stellen.</p>
       <details id="tts-debug-details">
         <summary>Diagnose-Log (bei Problemen mit der Sprachausgabe, z. B. im Auto)</summary>
         <p class="hint">Zeichnet auf, was die Sprachausgabe auf diesem Gerät tatsächlich tut — hilfreich, wenn Vorlesen unterwegs ausbleibt oder verspätet kommt. Am besten kurz vor der Fahrt hier "Leeren" antippen, damit der ganze Verlauf hineinpasst; nach der Fahrt "Kopieren" antippen und den Text schicken.</p>
@@ -676,6 +683,8 @@ export function mount(container) {
         ttsService.previewVoice(langPrefix, select.value, VOICE_SAMPLES[langPrefix]);
       });
     });
+
+    box.querySelector('#lead-in-select').addEventListener("change", (e) => ttsService.setLeadInMs(e.target.value));
 
     const debugLogEl = box.querySelector('#tts-debug-log');
     const fillDebugLog = () => { debugLogEl.value = ttsService.getDebugLog().join('\n'); };

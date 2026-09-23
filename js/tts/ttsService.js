@@ -1,3 +1,5 @@
+import { toneService } from '../audio/toneService.js';
+
 /**
  * iOS Safari only allows speechSynthesis.speak() once the page has called it
  * synchronously inside a user-gesture handler (tap/click); before that, calls
@@ -170,9 +172,6 @@ function speakOne(text, langPrefix, { rate, gen, onDone, useDefaultVoice } = {})
   utterance.onerror = (e) => finish(`onerror(${e?.error || '?'})`);
   liveUtterances.add(utterance);
   speechSynthesis.speak(utterance);
-  // A queue that has been idle can need a nudge before it plays anything.
-  speechSynthesis.resume();
-
   if (!useDefaultVoice) {
     startWatch = setTimeout(() => {
       // speaking/pending means the engine has it in hand — leave it alone
@@ -195,20 +194,50 @@ function speakOne(text, langPrefix, { rate, gen, onDone, useDefaultVoice } = {})
 }
 
 /** Starts a new speech request, replacing whatever is playing. run() receives this request's generation. */
-function startFresh(run) {
+const LEAD_IN_KEY = 'vocab-bt-lead-in-ms';
+
+function getLeadInMs() {
+  try { return Number(localStorage.getItem(LEAD_IN_KEY) ?? 600); } catch { return 0; }
+}
+
+function setLeadInMs(ms) {
+  try { localStorage.setItem(LEAD_IN_KEY, String(Number(ms) || 0)); } catch { /* stays 0 for this session */ }
+}
+
+/**
+ * Starts a new speech request, replacing whatever is playing. run() receives
+ * this request's generation. `leadIn` (automatic, timer-driven speech only —
+ * never a tap-triggered call, which must stay synchronous for iOS) plays a
+ * short blip and holds the word back by the user's "Vorlauf" setting, for
+ * car stereos that need that long to wake from silence: the word then starts
+ * after the link is up instead of being swallowed while it wakes.
+ */
+function startFresh(run, { leadIn = false } = {}) {
   generation += 1;
   const gen = generation;
   const busy = speechSynthesis.speaking || speechSynthesis.pending;
   if (busy) speechSynthesis.cancel();
   // Chrome can get stuck in a paused state (e.g. after the tab was in the background).
   speechSynthesis.resume();
-  if (!busy) {
+  const leadInMs = leadIn ? getLeadInMs() : 0;
+  if (leadInMs > 0) {
+    logDebug('vorlauf', `${leadInMs}ms`);
+    toneService.playWake();
+  }
+  // Timer-driven speech (leadIn) always cancels first, even when idle, as the
+  // version that worked over Bluetooth did: on a car stereo the swallowed
+  // word is the one that follows a silent pause, and an idle cancel() before
+  // speaking is the one thing that version did which this one stopped doing.
+  // The short wait afterwards keeps it from being dropped as a same-tick pair.
+  if (leadIn && !busy) speechSynthesis.cancel();
+  const wait = Math.max(leadInMs, busy || leadIn ? AFTER_CANCEL_DELAY_MS : 0);
+  if (wait === 0) {
     run(gen);
     return;
   }
   setTimeout(() => {
     if (gen === generation) run(gen);
-  }, AFTER_CANCEL_DELAY_MS);
+  }, wait);
 }
 
 /**
@@ -267,8 +296,8 @@ export const ttsService = {
    * the speak() gesture requirement (see module doc), but isn't guaranteed;
    * callers should offer a manual fallback control regardless.
    */
-  speakOnce(text, langPrefix, { onEnd, rate } = {}) {
-    startFresh((gen) => speakOne(text, langPrefix, { rate, gen, onDone: onEnd }));
+  speakOnce(text, langPrefix, { onEnd, rate, leadIn = false } = {}) {
+    startFresh((gen) => speakOne(text, langPrefix, { rate, gen, onDone: onEnd }), { leadIn });
   },
 
   /**
@@ -278,7 +307,7 @@ export const ttsService = {
    * speakOnce: this whole chain typically isn't gesture-triggered, so a
    * caller-side timeout backstop is recommended in case onEnd never fires.
    */
-  speakSequence(items, onEnd) {
+  speakSequence(items, onEnd, { leadIn = false } = {}) {
     const valid = items.filter((i) => i.text);
     if (valid.length === 0) {
       generation += 1;
@@ -297,7 +326,7 @@ export const ttsService = {
         speakOne(item.text, item.lang, { rate: item.rate, gen, onDone: playNext });
       };
       playNext();
-    });
+    }, { leadIn });
   },
 
   stop() {
@@ -348,6 +377,9 @@ export const ttsService = {
       return [];
     }
   },
+
+  getLeadInMs,
+  setLeadInMs,
 
   clearDebugLog() {
     try { localStorage.removeItem(DEBUG_LOG_KEY); } catch { /* nothing to clear */ }

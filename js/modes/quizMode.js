@@ -350,7 +350,7 @@ export function mount(container) {
       if (currentCard() !== card) return; // card changed while speech was playing
       rtRevealTimer = setTimeout(() => revealReadThink(card), REVEAL_DELAY_MS);
     };
-    ttsService.speakOnce(promptText(card), promptLang(), { onEnd: startReveal });
+    ttsService.speakOnce(promptText(card), promptLang(), { onEnd: startReveal, leadIn: true });
     rtPrimarySpeechTimer = setTimeout(startReveal, PRIMARY_SPEECH_BACKSTOP_MS);
   }
 
@@ -382,7 +382,7 @@ export function mount(container) {
       rtButtonsActive = true;
       render();
     };
-    ttsService.speakSequence(items, activateButtonsOnce);
+    ttsService.speakSequence(items, activateButtonsOnce, { leadIn: true });
     // Backstop in case none of the onend callbacks fire (speech silently dropped).
     if (rtActivateBackstopTimer) clearTimeout(rtActivateBackstopTimer);
     rtActivateBackstopTimer = setTimeout(activateButtonsOnce, TRANSLATION_SPEECH_BACKSTOP_MS);

@@ -185,7 +185,7 @@ export function mount(container) {
       };
       whenSpeechReady(speechReady, card, () => {
         const text = primaryText(card);
-        ttsService.speakOnce(text, promptLang(), { onEnd: startReveal });
+        ttsService.speakOnce(text, promptLang(), { onEnd: startReveal, leadIn: true });
         // Backstop in case onEnd never fires (speech silently dropped).
         primarySpeechTimer = setTimeout(startReveal, ttsService.estimateDurationMs(text));
       });
@@ -237,7 +237,7 @@ export function mount(container) {
       }
       enterStopWindow(card);
     };
-    ttsService.speakSequence(items, enterWindowOnce);
+    ttsService.speakSequence(items, enterWindowOnce, { leadIn: true });
     // Backstop in case none of the onend callbacks fire (speech silently dropped).
     if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
     const backstopMs = items.reduce((sum, item) => sum + ttsService.estimateDurationMs(item.text), 0);
@@ -323,7 +323,7 @@ export function mount(container) {
       // on top of each other instead of one after the other.
       setTimeout(() => {
         // Best-effort speech — the correct answer is also always shown as text.
-        ttsService.speakOnce(expected, answerLang(), { onEnd: () => advanceCard() });
+        ttsService.speakOnce(expected, answerLang(), { onEnd: () => advanceCard(), leadIn: true });
       }, toneService.DURATION_MS);
       // Backstop in case onEnd never fires (e.g. speech silently dropped).
       autoAdvanceTimer = setTimeout(() => advanceCard(), toneService.DURATION_MS + LISTEN_TIMEOUT_MS);

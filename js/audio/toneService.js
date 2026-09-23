@@ -63,6 +63,11 @@ export const toneService = {
   },
 
   /** A coaster landing on the Bierdeckel-Challenge tower — pitch drops slightly as the tower grows, like a taller stack sounding duller/heavier. */
+  /** A short soft blip played just before speech when the "Vorlauf" setting is on — the sacrificial sound that lets a sleeping Bluetooth link wake up before the word itself starts. */
+  playWake() {
+    playTone([400], 0.15, 0.12);
+  },
+
   playCoasterPlace(height = 0) {
     const freq = 320 - Math.min(height, 20) * 6;
     playTone([freq], 0.07, 0.14);

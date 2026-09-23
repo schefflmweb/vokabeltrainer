@@ -660,7 +660,14 @@ export function mount(container) {
         <span class="voice-row-label">Deutsch</span>
         <select class="voice-select" id="voice-select-de">${voiceOptionsHtml('de')}</select>
         <button type="button" class="btn btn-icon" id="voice-test-de" aria-label="Deutsche Stimme anhören"><span class="icon-inline-wrap">${speakerIcon}</span></button>
-      </div>`;
+      </div>
+      <details id="tts-debug-details">
+        <summary>Diagnose-Log (bei Problemen mit der Sprachausgabe, z. B. im Auto)</summary>
+        <p class="hint">Zeichnet auf, was die Sprachausgabe auf diesem Gerät tatsächlich tut — hilfreich, wenn Vorlesen unterwegs ausbleibt oder verspätet kommt. Nach einer betroffenen Fahrt hier öffnen, "Kopieren" antippen und den Text schicken.</p>
+        <textarea id="tts-debug-log" rows="8" readonly></textarea>
+        <button type="button" class="btn btn-secondary" id="tts-debug-copy-btn">Kopieren</button>
+        <button type="button" class="btn btn-secondary" id="tts-debug-clear-btn">Leeren</button>
+      </details>`;
 
     ['en', 'de'].forEach((langPrefix) => {
       const select = box.querySelector(`#voice-select-${langPrefix}`);
@@ -668,6 +675,25 @@ export function mount(container) {
       box.querySelector(`#voice-test-${langPrefix}`).addEventListener('click', () => {
         ttsService.previewVoice(langPrefix, select.value, VOICE_SAMPLES[langPrefix]);
       });
+    });
+
+    const debugLogEl = box.querySelector('#tts-debug-log');
+    const fillDebugLog = () => { debugLogEl.value = ttsService.getDebugLog().join('\n'); };
+    box.querySelector('#tts-debug-details').addEventListener('toggle', (e) => {
+      if (e.target.open) fillDebugLog();
+    });
+    box.querySelector('#tts-debug-copy-btn').addEventListener('click', async () => {
+      fillDebugLog();
+      debugLogEl.select();
+      try {
+        await navigator.clipboard.writeText(debugLogEl.value);
+      } catch {
+        document.execCommand('copy'); // clipboard API unavailable — the selection above still lets this fall back
+      }
+    });
+    box.querySelector('#tts-debug-clear-btn').addEventListener('click', () => {
+      ttsService.clearDebugLog();
+      fillDebugLog();
     });
 
     unsubscribeVoices?.();

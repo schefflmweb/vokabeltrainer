@@ -7,6 +7,33 @@
  * gesture; only replacing speech that is still playing defers by a moment.
  */
 
+/**
+ * Two blind guesses at what fails over Bluetooth in the car have each turned
+ * out wrong once actually tested there — most recently the very rescue that
+ * used to make the answer word work reliably. Guessing a third time isn't
+ * worth it: instead, a small log of what speechSynthesis actually did stays
+ * around after a drive, so the next report can carry facts (did onstart ever
+ * fire? did the backstop trigger? how long did it wait?) instead of another
+ * guess. Kept in localStorage, not memory, so it survives the phone locking
+ * or the tab reloading mid-drive; capped well short of anything that could
+ * matter for storage space.
+ */
+const DEBUG_LOG_KEY = 'vocab-tts-debug-log';
+const DEBUG_LOG_MAX = 300;
+const debugLogStartedAt = Date.now();
+
+function logDebug(event, details = '') {
+  try {
+    const line = `+${(Date.now() - debugLogStartedAt).toString().padStart(6, ' ')}ms  ${event}${details ? '  ' + details : ''}`;
+    const existing = JSON.parse(localStorage.getItem(DEBUG_LOG_KEY) || '[]');
+    existing.push(line);
+    if (existing.length > DEBUG_LOG_MAX) existing.splice(0, existing.length - DEBUG_LOG_MAX);
+    localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(existing));
+  } catch {
+    // Private mode / full storage — the log is a nice-to-have, never worth breaking speech over.
+  }
+}
+
 let voicesCache = [];
 let voicesPollStarted = false;
 let voiceListeners = [];
@@ -81,16 +108,16 @@ let generation = 0;
 // as cancel(). Only cancel when something is actually playing, and then give
 // the engine a moment before speaking again.
 const AFTER_CANCEL_DELAY_MS = 80;
-// Safari accepts an utterance and then sometimes stays silent — but only,
-// as far as we've seen, with a voice that is synthesised over the network.
-// An on-device voice that hasn't started yet is simply warming up, and over
-// Bluetooth that takes considerably longer: a car stereo has to wake its
-// audio link first, and the first word of a card comes after the longest
-// pause in a session. Replacing the utterance there cost the word instead of
-// saving it — it arrived late, or (cancel() and speak() landing in the same
-// tick, which the engines drop) not at all, while the translation spoken a
-// few seconds later was always fine. So the backstop is armed for network
-// voices only, and waits longer before it acts.
+// Safari (and, per a Bluetooth-in-car report, on-device voices too) can
+// accept an utterance and then simply stay silent forever — no onstart, no
+// onerror, nothing. That silence is worse than a false-positive rescue, so
+// the backstop stays armed for every voice, not just network ones (a v61
+// attempt narrowed this to network voices only, on the guess that an
+// on-device voice's silence was really the car's Bluetooth link still
+// waking up; a real in-car test showed that guess wrong — the answer word,
+// which used to be rescued this way and always worked, went silent
+// instead). The wait is generous specifically so a legitimately slow start
+// — over Bluetooth or otherwise — isn't mistaken for a stuck one.
 const SPEECH_START_TIMEOUT_MS = 2500;
 
 function speakOne(text, langPrefix, { rate, gen, onDone, useDefaultVoice } = {}) {
@@ -100,30 +127,41 @@ function speakOne(text, langPrefix, { rate, gen, onDone, useDefaultVoice } = {})
   const voice = useDefaultVoice ? null : pickVoice(langPrefix);
   if (voice) utterance.voice = voice;
 
+  const voiceLabel = voice ? `${voice.name} (${runsOnDevice(voice) ? 'Gerät' : 'Netz'})` : 'Standard';
+  logDebug('speak', `"${text}" ${langPrefix} stimme=${voiceLabel}`);
+
   let settled = false;
   let replaced = false;
   let startWatch = null;
-  const finish = () => {
+  const finish = (source) => {
     if (settled) return;
     settled = true;
     clearTimeout(startWatch);
     liveUtterances.delete(utterance);
+    logDebug(source, `"${text}"`);
     if (!replaced && gen === generation) onDone?.();
   };
-  utterance.onstart = () => clearTimeout(startWatch);
+  utterance.onstart = () => {
+    clearTimeout(startWatch);
+    logDebug('onstart', `"${text}"`);
+  };
   // Safari reports some failures only via onerror, never onend.
-  utterance.onend = finish;
-  utterance.onerror = finish;
+  utterance.onend = () => finish('onend');
+  utterance.onerror = (e) => finish(`onerror(${e?.error || '?'})`);
   liveUtterances.add(utterance);
   speechSynthesis.speak(utterance);
   // A queue that has been idle can need a nudge before it plays anything.
   speechSynthesis.resume();
 
-  if (voice && !useDefaultVoice && !runsOnDevice(voice)) {
+  if (!useDefaultVoice) {
     startWatch = setTimeout(() => {
       // speaking/pending means the engine has it in hand — leave it alone
       // rather than risk cutting off a voice that is simply slow to start.
-      if (settled || gen !== generation || speechSynthesis.speaking || speechSynthesis.pending) return;
+      if (settled || gen !== generation || speechSynthesis.speaking || speechSynthesis.pending) {
+        logDebug('backstop-skip', `"${text}" speaking=${speechSynthesis.speaking} pending=${speechSynthesis.pending}`);
+        return;
+      }
+      logDebug('backstop-retry', `"${text}"`);
       replaced = true;
       speechSynthesis.cancel();
       // Re-speaking in the same tick as cancel() is what the engines drop
@@ -275,6 +313,19 @@ export const ttsService = {
     return () => {
       voiceListeners = voiceListeners.filter((l) => l !== fn);
     };
+  },
+
+  /** The recent speech-engine event log — see the module doc above debugLogStartedAt. Newest last. */
+  getDebugLog() {
+    try {
+      return JSON.parse(localStorage.getItem(DEBUG_LOG_KEY) || '[]');
+    } catch {
+      return [];
+    }
+  },
+
+  clearDebugLog() {
+    try { localStorage.removeItem(DEBUG_LOG_KEY); } catch { /* nothing to clear */ }
   },
 
   /** Speaks a short sample with a specific voice, for previewing in the voice picker — must be called directly from a click (see module doc). */

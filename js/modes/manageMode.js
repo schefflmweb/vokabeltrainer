@@ -663,7 +663,7 @@ export function mount(container) {
       </div>
       <details id="tts-debug-details">
         <summary>Diagnose-Log (bei Problemen mit der Sprachausgabe, z. B. im Auto)</summary>
-        <p class="hint">Zeichnet auf, was die Sprachausgabe auf diesem Gerät tatsächlich tut — hilfreich, wenn Vorlesen unterwegs ausbleibt oder verspätet kommt. Nach einer betroffenen Fahrt hier öffnen, "Kopieren" antippen und den Text schicken.</p>
+        <p class="hint">Zeichnet auf, was die Sprachausgabe auf diesem Gerät tatsächlich tut — hilfreich, wenn Vorlesen unterwegs ausbleibt oder verspätet kommt. Am besten kurz vor der Fahrt hier "Leeren" antippen, damit der ganze Verlauf hineinpasst; nach der Fahrt "Kopieren" antippen und den Text schicken.</p>
         <textarea id="tts-debug-log" rows="8" readonly></textarea>
         <button type="button" class="btn btn-secondary" id="tts-debug-copy-btn">Kopieren</button>
         <button type="button" class="btn btn-secondary" id="tts-debug-clear-btn">Leeren</button>

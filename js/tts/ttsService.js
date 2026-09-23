@@ -15,23 +15,43 @@
  * around after a drive, so the next report can carry facts (did onstart ever
  * fire? did the backstop trigger? how long did it wait?) instead of another
  * guess. Kept in localStorage, not memory, so it survives the phone locking
- * or the tab reloading mid-drive; capped well short of anything that could
- * matter for storage space.
+ * or the tab reloading mid-drive.
+ *
+ * The line cap has to survive a whole session, not just a couple of cards:
+ * an early version capped at 300 lines, which at ~6 lines per card pair
+ * (speak+onstart+onend, twice) rotated out after only a minute or two — so
+ * the one part that actually mattered, the session's first word, was always
+ * gone by the time a drive ended and the log got read. 6000 lines covers
+ * roughly a thousand card pairs, hours of continuous Auto mode, at a
+ * trivial fraction of what localStorage allows.
  */
 const DEBUG_LOG_KEY = 'vocab-tts-debug-log';
-const DEBUG_LOG_MAX = 300;
+const DEBUG_LOG_MAX = 6000;
 const debugLogStartedAt = Date.now();
+let loggedSessionMarker = false;
 
 function logDebug(event, details = '') {
   try {
-    const line = `+${(Date.now() - debugLogStartedAt).toString().padStart(6, ' ')}ms  ${event}${details ? '  ' + details : ''}`;
-    const existing = JSON.parse(localStorage.getItem(DEBUG_LOG_KEY) || '[]');
-    existing.push(line);
-    if (existing.length > DEBUG_LOG_MAX) existing.splice(0, existing.length - DEBUG_LOG_MAX);
-    localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(existing));
+    // Marks where a page (re)load falls in the log, so a log spanning more
+    // than one load — the tab reloading mid-drive, or an old log never
+    // cleared before the next one — doesn't read as one continuous run with
+    // its elapsed time jumping backwards.
+    if (!loggedSessionMarker) {
+      loggedSessionMarker = true;
+      const already = localStorage.getItem(DEBUG_LOG_KEY);
+      if (already) appendDebugLine('--- Seite neu geladen — Zeit ab hier beginnt wieder bei 0 ---');
+    }
+    appendDebugLine(`+${(Date.now() - debugLogStartedAt).toString().padStart(6, ' ')}ms  ${event}${details ? '  ' + details : ''}`);
   } catch {
     // Private mode / full storage — the log is a nice-to-have, never worth breaking speech over.
   }
+}
+
+function appendDebugLine(line) {
+  const existing = JSON.parse(localStorage.getItem(DEBUG_LOG_KEY) || '[]');
+  existing.push(line);
+  if (existing.length > DEBUG_LOG_MAX) existing.splice(0, existing.length - DEBUG_LOG_MAX);
+  localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(existing));
 }
 
 let voicesCache = [];
@@ -313,6 +333,11 @@ export const ttsService = {
     return () => {
       voiceListeners = voiceListeners.filter((l) => l !== fn);
     };
+  },
+
+  /** Drops a labeled marker into the debug log — used to mark where an Auto-mode session started, so its first (coldest) word is easy to find afterward. */
+  debugMark(label) {
+    logDebug('---', label);
   },
 
   /** The recent speech-engine event log — see the module doc above debugLogStartedAt. Newest last. */

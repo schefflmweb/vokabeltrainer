@@ -7,7 +7,7 @@ import { flagGB, flagDE } from '../ui/flags.js';
 import { checklistIcon, keyboardIcon, speakerIcon, thinkingIcon, starIcon, refreshIcon, checkCircleIcon, xCircleIcon, playIcon } from '../ui/icons.js';
 import { answersMatch } from '../util/answerMatch.js';
 
-const SESSION_SIZE = 15;
+const SESSION_SIZE = 10;
 // "Zuhören" timing — same values/reasoning as Auto mode's "Zuhören",
 // copied here as a third Quiz practice type.
 const REVEAL_DELAY_MS = 3000;

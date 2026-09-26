@@ -3,7 +3,7 @@ import { syncService } from '../data/syncService.js';
 import { progressBarHtml } from '../ui/progressBar.js';
 import { bookIcon, refreshIcon, starIcon, checkCircleIcon, xCircleIcon, playIcon } from '../ui/icons.js';
 
-const SESSION_SIZE = 12;
+const SESSION_SIZE = 10;
 
 function shuffle(arr) {
   return [...arr].sort(() => Math.random() - 0.5);

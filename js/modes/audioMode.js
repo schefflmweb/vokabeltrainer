@@ -12,7 +12,7 @@ import {
   thinkingIcon, speakerIcon, xCircleIcon, checkCircleIcon, errorIcon, skipIcon
 } from '../ui/icons.js';
 
-const SESSION_SIZE = 15;
+const SESSION_SIZE = 10;
 const LISTEN_TIMEOUT_MS = 8000;
 const REVEAL_DELAY_MS = 3000;
 const AUTO_ADVANCE_DELAY_MS = 800;

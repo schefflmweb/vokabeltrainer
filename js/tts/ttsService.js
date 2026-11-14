@@ -1,4 +1,5 @@
 import { toneService } from '../audio/toneService.js';
+import { audioSessionUnlock } from '../audio/audioSessionUnlock.js';
 
 /**
  * iOS Safari only allows speechSynthesis.speak() once the page has called it
@@ -220,6 +221,7 @@ function startFresh(run, { leadIn = false } = {}) {
   // Chrome can get stuck in a paused state (e.g. after the tab was in the background).
   speechSynthesis.resume();
   const leadInMs = leadIn ? getLeadInMs() : 0;
+  if (leadIn) audioSessionUnlock.ensureRunning();
   if (leadInMs > 0) {
     logDebug('vorlauf', `${leadInMs}ms`);
     toneService.playWake();

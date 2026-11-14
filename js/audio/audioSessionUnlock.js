@@ -43,6 +43,27 @@ const KEEP_ALIVE_VOLUME = 0.35;
 
 let audioEl = null;
 
+// True between start() and stop(): the loop is supposed to be playing.
+let wanted = false;
+let resumeTimer = null;
+
+/**
+ * iOS pauses a page's media when its audio session is interrupted — a
+ * navigation announcement, a call, a notification sound — and never resumes
+ * it by itself. The loop is what keeps the Bluetooth link awake, so once it
+ * stopped, every later word was back to waking a sleeping car stereo, for the
+ * rest of the drive, with nothing in the app to notice. Retried a moment
+ * later rather than at once (and at most a few times a second), so a system
+ * that keeps pausing it can't turn this into a busy loop.
+ */
+function scheduleResume() {
+  if (!wanted || resumeTimer) return;
+  resumeTimer = setTimeout(() => {
+    resumeTimer = null;
+    if (wanted && audioEl?.paused) audioEl.play().catch(() => {});
+  }, 300);
+}
+
 // Starting playback switches iOS's audio session, which can cut off speech
 // that began at the same moment — so speech waits until this has settled.
 const PLAY_SETTLE_MAX_MS = 600;
@@ -95,7 +116,15 @@ export const audioSessionUnlock = {
       audioEl = new Audio(buildKeepAliveAudioUrl());
       audioEl.loop = true;
       audioEl.volume = KEEP_ALIVE_VOLUME;
+      audioEl.addEventListener('pause', scheduleResume);
+      audioEl.addEventListener('ended', scheduleResume);
+      // Coming back to the app (e.g. after switching to the navigation app)
+      // is the other moment the loop is most likely to have been dropped.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') scheduleResume();
+      });
     }
+    wanted = true;
     // Best-effort — if this silently fails, speechSynthesis just falls back
     // to its normal (ambient-category, phone-speaker-only) behavior.
     const played = audioEl.play().catch(() => {});
@@ -104,8 +133,16 @@ export const audioSessionUnlock = {
       .then(() => new Promise((resolve) => setTimeout(resolve, AFTER_PLAY_SETTLE_MS)));
   },
 
+  /** Restarts the loop right now if it was dropped — called before timer-driven speech, since a restart started later than that would come after the word. */
+  ensureRunning() {
+    if (wanted && audioEl?.paused) audioEl.play().catch(() => {});
+  },
+
   /** Call when leaving Auto mode — no reason to keep a silent loop running elsewhere. */
   stop() {
+    wanted = false;
+    clearTimeout(resumeTimer);
+    resumeTimer = null;
     audioEl?.pause();
   }
 };

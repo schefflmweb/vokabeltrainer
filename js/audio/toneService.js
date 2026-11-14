@@ -21,7 +21,10 @@ function getContext() {
 function playTone(freqSequence, noteDuration = 0.12, gain = 0.18) {
   const ctx = getContext();
   if (!ctx) return;
-  if (ctx.state === 'suspended') ctx.resume();
+  // Not just 'suspended': after an audio interruption (call, navigation
+  // announcement) iOS reports 'interrupted', which also needs a resume() —
+  // otherwise every tone after the first interruption is silently lost.
+  if (ctx.state !== 'running') ctx.resume();
   let t = ctx.currentTime;
   freqSequence.forEach((freq) => {
     const osc = ctx.createOscillator();
@@ -51,7 +54,7 @@ export const toneService = {
   /** Call synchronously from the tap that starts a session. */
   unlock() {
     const ctx = getContext();
-    if (ctx && ctx.state === 'suspended') ctx.resume();
+    if (ctx && ctx.state !== 'running') ctx.resume();
   },
 
   playCorrect() {
